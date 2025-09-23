@@ -40,8 +40,10 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
     bottom_water, oxygen, spent_catalyst, gas_out, MeOH = outs
     
     # capture CO2
-    U1301 = units.AmineAbsorption('U1301', ins=(emissions_BT, makeup_MEA, makeup_water_1),\
-                                  outs=('vent', 'concentrated'), CO2_recovery=0.8)
+    S1300 = units.Splitter('S1300', ins=emissions_BT, outs=('emissions_to_be_captured', ''), split=1.0)
+    S1300.prioritize=True
+    U1301 = units.AmineAbsorption('U1301', ins=(S1300-0, makeup_MEA, makeup_water_1),\
+                                  outs=('vent_out', 'concentrated'), CO2_recovery=0.8)
     U1301.outs[1].phase = 'g'
     M1302 = units.Mixer('M1302', ins=(emissions_fermentation, U1301-1), outs='')
     S1301 = units.Splitter('S1301', ins=M1302-0, outs=('concentrated_CO2', 'other_gases'), split=dict(CO2=1.0))
@@ -150,7 +152,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
 #     sys.ID = ID
 #     return sys
 
-# Need to change sitepackage code of BT to exclude electrolyzer power comsumption
+# Need to change code of BT to exclude electrolyzer power comsumption
 # IsentropicCompressor also produces power, but production = consumption;
 # so change u.power_utility.consumption to rate
 # self.electricity_demand = sum([u.power_utility.rate for u in units if \
@@ -162,8 +164,8 @@ biorefinery_sys = create_cellulosic_ethanol_system('sys_ethanol_cs')
 emissions_BT = biorefinery_sys.flowsheet.BT.outs[0] # Boiler emissions
 emissions_fermentation = biorefinery_sys.flowsheet.D401.outs[0] # Fermentation emissions
 
-carbon_capture_sys = create_ccu_system(ins=[emissions_BT,
-                                            emissions_fermentation,
+carbon_capture_sys = create_ccu_system(ins=[biorefinery_sys.flowsheet.BT.outs[0],
+                                            biorefinery_sys.flowsheet.D401.outs[0],
                                             'makeup_MEA',
                                             'makeup_water_1',
                                             'hydrogen',
@@ -172,7 +174,23 @@ carbon_capture_sys = create_ccu_system(ins=[emissions_BT,
                                        outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
                                             water_electrolyzer=True)
 
-system = bst.System(path=[biorefinery_sys,
-                          carbon_capture_sys])
 
-system.set_tolerance(mol=1e-5, rmol=1e-5, maxiter=1000, method='fixed-point')
+system = bst.System(path=[biorefinery_sys, carbon_capture_sys], 
+                    facilities=[*biorefinery_sys.facilities], 
+                    recycle=emissions_BT)
+
+@system.flowsheet.PWC.add_specification(run=True)
+def update_water_streams():
+    u = system.flowsheet.unit
+    s = system.flowsheet.stream
+    u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+    u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
+                                   s.pretreatment_steam, s.warm_process_water_2,\
+                                       s.saccharification_water, s.stripping_water,\
+                                           u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
+                                               u.CIP.ins[0], u.FWT.ins[0])
+system.set_tolerance(mol=1e-6, rmol=1e-6, maxiter=800)
+
+# @system.add_specification(simulate=True)
+# def BT_set_electricity_source():
+#     system.flowsheet.BT.satisfy_system_electricity_demand = False
