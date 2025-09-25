@@ -32,7 +32,27 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
     bottom_water, oxygen, spent_catalyst, gas_out, MeOH = outs
     
     # capture CO2
-    U1301 = bst.AmineAbsorption('U1301', ins=(emissions_BT, makeup_MEA, makeup_water_1),\
+    S1300 = bst.Splitter('S1300', ins=emissions_BT, outs=('captured', 'purge'), split=1)
+    S1300.prioritize = True
+    S1300.register_alias('carbon_capture_splitter')
+    S1300.maximum_biorefinery_percent_capture = 150 # between 1 to <2
+    @S1300.add_specification(run=True)
+    def maximum_biorefinery_percent_capture(): # Percent of cellulosic biorefinery carbon emissions
+        emissions = S1300.ins[0]
+        try:
+            baseline_biorefinery_emissions = S1300.baseline_biorefinery_emissions
+        except:
+            S1300.baseline_biorefinery_emissions = baseline_biorefinery_emissions = emissions.F_mol
+            S1300.split[:] = 1
+            return
+        new_emissions = emissions.F_mol
+        maximum_emissions = S1300.maximum_biorefinery_percent_capture * baseline_biorefinery_emissions / 100
+        if new_emissions <= maximum_emissions:
+            S1300.split[:] = 1
+        else:
+            S1300.split[:] = maximum_emissions / new_emissions
+    
+    U1301 = bst.AmineAbsorption('U1301', ins=(S1300-0, makeup_MEA, makeup_water_1),\
                                   outs=('vent', 'concentrated'), CO2_recovery=0.8)
     U1301.outs[1].phase = 'g'
     M1302 = bst.Mixer('M1302', ins=(emissions_fermentation, U1301-1), outs='')
@@ -123,7 +143,29 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
     T1101 = bst.StorageTank('T1101', ins=S1104-1, outs=MeOH)
     
     
-
+def create_full_system():
+    chems = CCU.create_MeOH_chemicals()
+    bst.settings.set_thermo(chems, cache=True)
+    biorefinery_sys = CCU.create_cellulosic_ethanol_system('sys_ethanol_cs')
+    
+    emissions_BT = biorefinery_sys.flowsheet.BT.outs[0] # Boiler emissions
+    emissions_fermentation = biorefinery_sys.flowsheet.D401.outs[0] # Fermentation emissions
+    
+    carbon_capture_sys = CCU.create_ccu_system(ins=[emissions_BT,
+                                                emissions_fermentation,
+                                                'makeup_MEA',
+                                                'makeup_water_1',
+                                                'hydrogen',
+                                                'water_stream_1',
+                                                'catalyst_MeOH'],
+                                           outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
+                                                water_electrolyzer=True)
+    biorefinery_sys.simulate()
+    carbon_capture_sys.simulate()
+    system = bst.System(path=[biorefinery_sys,
+                              carbon_capture_sys])
+    system.set_tolerance(mol=1e-5, rmol=1e-5, maxiter=100, subsystems=True, method='fixed point')
+    return system
 
 
 # def system_hydrogen_purchased(ID, **kwargs):
