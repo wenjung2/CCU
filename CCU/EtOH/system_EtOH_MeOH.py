@@ -51,6 +51,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
             S1300.split[:] = 1
         else:
             S1300.split[:] = maximum_emissions / new_emissions
+        # print(f"{maximum_emissions / new_emissions:.0%}")
     
     U1301 = bst.AmineAbsorption('U1301', ins=(S1300-0, makeup_MEA, makeup_water_1),\
                                   outs=('vent', 'concentrated'), CO2_recovery=0.8)
@@ -150,7 +151,6 @@ def create_full_system():
     
     emissions_BT = biorefinery_sys.flowsheet.BT.outs[0] # Boiler emissions
     emissions_fermentation = biorefinery_sys.flowsheet.D401.outs[0] # Fermentation emissions
-    
     carbon_capture_sys = CCU.create_ccu_system(ins=[emissions_BT,
                                                 emissions_fermentation,
                                                 'makeup_MEA',
@@ -160,11 +160,9 @@ def create_full_system():
                                                 'catalyst_MeOH'],
                                            outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
                                                 water_electrolyzer=True)
-    biorefinery_sys.simulate()
-    carbon_capture_sys.simulate()
     system = bst.System(path=[biorefinery_sys,
                               carbon_capture_sys])
-    system.set_tolerance(mol=1e-5, rmol=1e-5, maxiter=100, subsystems=True, method='fixed point')
+    system.set_tolerance(mol=1e-3, rmol=1e-3, maxiter=500, subsystems=True, method='fixed point')
     return system
 
 
@@ -209,8 +207,6 @@ if __name__ == '__main__':
                                                 'catalyst_MeOH'],
                                            outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
                                                 water_electrolyzer=True)
-    biorefinery_sys.simulate()
-    carbon_capture_sys.simulate()
     system = bst.System(path=[biorefinery_sys,
                               carbon_capture_sys])
     system.set_tolerance(mol=1e-5, rmol=1e-5, maxiter=1000, method='fixed-point')
