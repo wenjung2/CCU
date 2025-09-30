@@ -4,9 +4,18 @@ Created on Wed Jun  4 10:38:17 2025
 
 @author: IGB
 """
-# this runs in succinic environment.
+# this runs in ccu environment.
     # 1. conda activate ccu
-    # 2. Select file path (biosteam/thermosteam) here
+    # 2. select file path (biosteam/thermosteam)
+    # 3. select file path (bioindustrialpark) to use create_cellulosic_ethanol_system
+    # 4. we are using individual CCU repo
+    # 5. optional to change biosteam BT.file to exclude electrolyzer (R1101) power comsumption,
+    #    IsentropicCompressor also produces power, but production = consumption;
+    #    so change u.power_utility.consumption to rate
+    #    self.electricity_demand = sum([u.power_utility.rate for u in units if \
+                                                    # u.ID != 'R1101'])
+    #    here, wind-power use for electrolyzer, BT imports NG for system heat demand
+    #    if not, BT will buy too much NG
     
 import biosteam as bst
 import CCU
@@ -27,7 +36,7 @@ from biorefineries.cellulosic.systems import create_cellulosic_ethanol_system
                          dict(ID='spent_catalyst', CaSO4=1),
                          dict(ID='gas_out', CO2=1),
                          dict(ID='MeOH', CH3OH=1),])
-def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, hydrogen_blue=None, hydrogen_gray=None):
+def create_ccu_system(ins, outs, water_electrolyzer=None):
     emissions_BT, emissions_fermentation, makeup_MEA, makeup_water_1, hydrogen, water_stream_1, catalyst_MeOH = ins
     bottom_water, oxygen, spent_catalyst, gas_out, MeOH = outs
     
@@ -88,7 +97,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
         @C1103.add_specification(run=True)
         def adjust_hydrogen_flow():
             U1301.run()
-            C1103.ins[0].imol['H2'] = U1301.outs[0].imol['CO2'] * 3 # H2:CO2 = 3:1
+            C1103.ins[0].imol['H2'] = U1301.outs[1].imol['CO2'] * 3 # H2:CO2 = 3:1
         
     M1101 = bst.Mixer('M1101', ins=(C1102-0, C1103-0), outs='', rigorous=True)
 
@@ -144,7 +153,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None, hydrogen_green=None, h
     T1101 = bst.StorageTank('T1101', ins=S1104-1, outs=MeOH)
     
     
-def create_full_system():
+def create_full_system(water_electrolyzer=None):
     chems = CCU.create_MeOH_chemicals()
     bst.settings.set_thermo(chems, cache=True)
     biorefinery_sys = CCU.create_cellulosic_ethanol_system('sys_ethanol_cs')
@@ -159,54 +168,34 @@ def create_full_system():
                                                 'water_stream_1',
                                                 'catalyst_MeOH'],
                                            outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
-                                                water_electrolyzer=True)
+                                                water_electrolyzer=water_electrolyzer,
+                                                )
+    
     system = bst.System(path=[biorefinery_sys,
                               carbon_capture_sys])
     system.set_tolerance(mol=1e-3, rmol=1e-3, maxiter=500, subsystems=True, method='fixed point')
     return system
 
 
-# def system_hydrogen_purchased(ID, **kwargs):
-#     sys = create_full_MeOH_system(**kwargs)
-#     @sys.flowsheet.PWC.add_specification(run=True)
-#     def update_water_streams():
-#         u, s = sys.flowsheet.unit, sys.flowsheet.stream
-#         u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
-#         u.PWC.process_water_streams = (
-#             s.warm_process_water_1, s.ammonia_process_water,
-#             s.pretreatment_steam, s.warm_process_water_2,
-#             s.saccharification_water, s.stripping_water,
-#             u.S401.ins[1], u.U1301.ins[2],
-#             u.CIP.ins[0], u.FWT.ins[0]
-#         )
-#     sys.ID = ID
-#     return sys
+def system_hydrogen_purchased(ID, **kwargs):
+    sys = create_full_system(**kwargs)
+    @sys.flowsheet.PWC.add_specification(run=True)
+    def update_water_streams():
+        u, s = sys.flowsheet.unit, sys.flowsheet.stream
+        u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+        u.PWC.process_water_streams = (
+            s.warm_process_water_1, s.ammonia_process_water,
+            s.pretreatment_steam, s.warm_process_water_2,
+            s.saccharification_water, s.stripping_water,
+            u.S401.ins[1], u.U1301.ins[2],
+            u.CIP.ins[0], u.FWT.ins[0]
+        )
+    sys.ID = ID
+    return sys
 
-# Need to change sitepackage code of BT to exclude electrolyzer power comsumption
-# IsentropicCompressor also produces power, but production = consumption;
-# so change u.power_utility.consumption to rate
-# self.electricity_demand = sum([u.power_utility.rate for u in units if \
-                                                # u.ID != 'R1101'])
-                                                
-#%%
 
-if __name__ == '__main__':
+def create_ethanol_system(ID):
     chems = CCU.create_MeOH_chemicals()
     bst.settings.set_thermo(chems, cache=True)
-    biorefinery_sys = create_cellulosic_ethanol_system('sys_ethanol_cs')
-    
-    emissions_BT = biorefinery_sys.flowsheet.BT.outs[0] # Boiler emissions
-    emissions_fermentation = biorefinery_sys.flowsheet.D401.outs[0] # Fermentation emissions
-    
-    carbon_capture_sys = create_ccu_system(ins=[emissions_BT,
-                                                emissions_fermentation,
-                                                'makeup_MEA',
-                                                'makeup_water_1',
-                                                'hydrogen',
-                                                'water_stream_1',
-                                                'catalyst_MeOH'],
-                                           outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
-                                                water_electrolyzer=True)
-    system = bst.System(path=[biorefinery_sys,
-                              carbon_capture_sys])
-    system.set_tolerance(mol=1e-5, rmol=1e-5, maxiter=1000, method='fixed-point')
+    biorefinery_sys = CCU.create_cellulosic_ethanol_system(ID=ID)
+    return biorefinery_sys

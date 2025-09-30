@@ -15,7 +15,6 @@ from biosteam.process_tools import UnitGroup
 from biosteam.evaluation import Model, Metric
 from biosteam.evaluation._model import create_function
 import CCU
-from biorefineries.cellulosic.systems import create_cellulosic_ethanol_system
 from warnings import filterwarnings; filterwarnings('ignore')
 
 available_systems = ['sys_ethanol', 'sys_MeOH_water_electrolyzer', 'sys_MeOH_hydrogen_green', 'sys_MeOH_hydrogen_blue', 'sys_MeOH_hydrogen_gray']
@@ -29,9 +28,9 @@ system_element_mapping = {available_systems[0]: {'A', 'A1'},
 #%%
 def create_model(system_name):
     if system_name == available_systems[0]:
-        system = CCU.create_cellulosic_ethanol_system('sys_ethanol_cs')
+        system = CCU.create_ethanol_system(ID='sys_ethanol_cs')
     elif system_name == available_systems[1]:
-        system = CCU.create_full_MeOH_system(water_electrolyzer=True)
+        system = CCU.create_full_system(water_electrolyzer=True)
         @system.flowsheet.PWC.add_specification(run=True)
         def update_water_streams():
             u = system.flowsheet.unit
@@ -43,11 +42,11 @@ def create_model(system_name):
                                                    u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
                                                        u.CIP.ins[0], u.FWT.ins[0])
     elif system_name == available_systems[2]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_green', water_electrolyzer=False, hydrogen_green=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_green', water_electrolyzer=False)
     elif system_name == available_systems[3]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_blue', water_electrolyzer=False, hydrogen_blue=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_blue', water_electrolyzer=False)
     elif system_name == available_systems[4]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_gray', water_electrolyzer=False, hydrogen_gray=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_gray', water_electrolyzer=False)
     
     CCU.load_preferences_and_process_settings(T='K',
                                           flow_units='kg/hr',
@@ -168,16 +167,18 @@ def create_model(system_name):
     # =============================================================================
     # create LCA
     # =============================================================================
-    input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
-                                     s.natural_gas, s.denaturant)
-    CCU_carbon_stream = (s.makeup_MEA)
-                                   
+                                  
     if system_name == available_systems[0]:
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL,
+                                         s.natural_gas, s.denaturant)
         by_products = []  # No coproducts for ethanol system
-        input_biogenic_carbon_streams = tuple([i for i in input_biogenic_carbon_streams if i not in CCU_carbon_stream])
     elif system_name == available_systems[1]:
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
+                                         s.natural_gas, s.denaturant)
         by_products = [s.MeOH, s.oxygen]  # MeOH and O2
     else:
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
+                                         s.natural_gas, s.denaturant)
         by_products = [s.MeOH] 
 
     lca = CCU.create_CCU_lca(system=system,
@@ -479,7 +480,7 @@ if __name__ == '__main__':
         distributions.append(dist)
     
     # Generate N Latin Hypercube samples
-    N = 20
+    N = 40
     joint_dist = cp.J(*distributions)
     samples = joint_dist.sample(size=N, rule='L', seed=3221)
     sample_df = pd.DataFrame(samples.T)
