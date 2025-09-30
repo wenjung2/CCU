@@ -39,10 +39,8 @@ class Electrolyzer(Unit):
     
     _units= {'Hydrogen flow rate': 'kg/hr'}
     
-    def __init__(self, ID="", ins=None, outs=(),
-                 base_kWh_per_kg_hydrogen=1208000/500000*24, # 1208 MW for 500 MT H2 per day; based on https://www.osti.gov/biblio/2203367 P17
-                 **kwargs):
-        bst.Unit.__init__(self, ID, ins, outs)
+    def _init(self, base_kWh_per_kg_hydrogen=1208000/500000*24):
+        # 1208 MW for 500 MT H2 per day; based on https://www.osti.gov/biblio/2203367 P17
         self.base_kWh_per_kg_hydrogen = base_kWh_per_kg_hydrogen
         
     def _run(self):
@@ -74,33 +72,32 @@ class MeOH_SynthesisReactor(bst.units.design_tools.PressureVessel, bst.Unit):
     _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default,
                      'Catalyst': 1.0} # Cu/ZnO/Al2O3
     
-    def __init__(self, ID="", ins=None, outs=(),
-                 T=210+273.15,
-                 P=7600000/6894.76,
-                 vessel_material='Stainless steel 304',
-                 vessel_type='Vertical',
-                 length_to_diameter=0.15/0.016, # 10.1016/j.jclepro.2013.06.008
-                 WHSV = 0.028 * 3600 / 34.8, # In kg/hr feed / kg catalyst; 10.1016/j.jclepro.2013.06.008
-                 catalyst_density = 1775, # In kg/m^3; 10.1016/j.jclepro.2013.06.008
-                 catalyst_price = 30, # reference in process_settings
-                 catalyst_longevity = 7884, # 1 year; from Perez report
-                 porosity = 0.5, # fraction of the bed volume occupied by void space
-                 **kwargs):
-            bst.Unit.__init__(self, ID, ins, outs)
-            self.T = T
-            self.P = P
-            self.vessel_material = vessel_material # Vessel material
-            self.vessel_type = vessel_type # 'Horizontal' or 'Vertical'
-            self.length_to_diameter = length_to_diameter #: Length to diameter ratio
-            self.WHSV = WHSV
-            self.catalyst_density = catalyst_density
-            self.catalyst_price = 13 # In USD/kg
-            self.catalyst_longevity = catalyst_longevity
-            self.porosity = 0.5 
-            self.reactions = ParallelRxn([
-                # Reaction definition                 Reactant    Conversion
-                Rxn('CO2 + 3H2 -> CH3OH + H2O',       'CO2',      0.210),
-                Rxn('CO2 + H2 -> CO + H2O',           'CO2',      0.004),])
+    def _init(self, 
+              T=210+273.15,
+              P=7600000/6894.76,
+              vessel_material='Stainless steel 304',
+              vessel_type='Vertical',
+              length_to_diameter=0.15/0.016, # 10.1016/j.jclepro.2013.06.008
+              WHSV = 0.028 * 3600 / 34.8, # In kg/hr feed / kg catalyst; 10.1016/j.jclepro.2013.06.008
+              catalyst_density = 1775, # In kg/m^3; 10.1016/j.jclepro.2013.06.008
+              catalyst_price = 30, # reference in process_settings
+              catalyst_longevity = 7884, # 1 year; from Perez report
+              porosity = 0.5, # fraction of the bed volume occupied by void space
+        ):
+        self.T = T
+        self.P = P
+        self.vessel_material = vessel_material # Vessel material
+        self.vessel_type = vessel_type # 'Horizontal' or 'Vertical'
+        self.length_to_diameter = length_to_diameter #: Length to diameter ratio
+        self.WHSV = WHSV
+        self.catalyst_density = catalyst_density
+        self.catalyst_price = 13 # In USD/kg
+        self.catalyst_longevity = catalyst_longevity
+        self.porosity = 0.5 
+        self.reactions = ParallelRxn([
+            # Reaction definition                 Reactant    Conversion
+            Rxn('CO2 + 3H2 -> CH3OH + H2O',       'CO2',      0.210),
+            Rxn('CO2 + H2 -> CO + H2O',           'CO2',      0.004),])
                 
     
     def _run(self):
@@ -150,9 +147,6 @@ class Reactor(bst.units.design_tools.PressureVessel, bst.Unit, isabstract=True):
     # converted from ft3 to m3
     _V_max = pi/4*(20**2)*40/35.3147
     
-    def _setup(self):
-        super()._setup()
-        
     def _design(self):
         Design = self.design_results
         Design['Catalyst_weight'] = catalyst_weight = self.catalyst_weight

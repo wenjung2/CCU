@@ -7,10 +7,8 @@ Created on Thu Jun  5 14:27:18 2025
 
 import numpy as np
 import biosteam as bst
-from EtOH._chemicals import create_MeOH_chemicals
 import biorefineries.cellulosic.streams as cellulosic_stream
 
-chems = create_MeOH_chemicals()
 __all__=('load_preferences_and_process_settings',
          'price',
          'CFs')
@@ -135,8 +133,8 @@ lime_price = 0.13514 # https://www.usgs.gov/media/files/lime-historical-statisti
 boiler_chems_price = 809/55/9.1/_lb2kg # 55 gal cost $809 https://www.chemworld.com/ProductDetails.asp?ProductCode=CHEMWORLD%2D1394
                                        # density is 9.1 lb/gal, from pdf.on website accessed Jan 10 2024
 
-CH4_V = chems.CH4.V(298.15, 101325) # molar volume in m3/mol
-CH4_MW = chems.CH4.MW
+CH4_V = 0.02442228247625229 # molar volume in m3/mol
+CH4_MW = 16.04246
 natural_gas_price_2016_to_2023 = [3.51,4.08,4.19,3.90,3.32,5.44,7.69,4.53] # https://www.eia.gov/dnav/ng/hist/n3035us3a.htm $/Mcf(thousand cubic feet)
 natural_gas_price = np.mean(natural_gas_price_2016_to_2023)/1e3*_ft3_per_m3*CH4_V * (1e3/CH4_MW) * _utility_2016_2023_period_to2023
 

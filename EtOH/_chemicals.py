@@ -11,8 +11,6 @@ import biosteam as bst
 from thermosteam import Chemical, functional as fn
 from biorefineries.cellulosic.chemicals import create_cellulosic_ethanol_chemicals
 
-cellulosic_ethanol_chems = create_cellulosic_ethanol_chemicals()
-
 #%% 
 # Constants
 
@@ -81,6 +79,8 @@ def create_MeOH_chemicals():
     chems.append(MeOH)
     chems.append(HCOOH)
     # chems.append(CaO)
+    cellulosic_ethanol_chems = create_cellulosic_ethanol_chemicals()
     chems.extend([i for i in cellulosic_ethanol_chems if i.ID not in chems])
     chems.compile()
+    chems.set_synonym('Extract','Extractives')
     return chems

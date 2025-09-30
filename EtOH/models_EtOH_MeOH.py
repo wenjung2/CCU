@@ -14,12 +14,8 @@ import biosteam as bst
 from biosteam.process_tools import UnitGroup
 from biosteam.evaluation import Model, Metric
 from biosteam.evaluation._model import create_function
-from _process_settings import price, CFs, load_preferences_and_process_settings
-from _tea import EtOH_TEA
-from _lca import create_CCU_lca
+import CCU
 from biorefineries.cellulosic.systems import create_cellulosic_ethanol_system
-import EtOH as EtOH
-from EtOH.system_EtOH_MeOH import create_full_MeOH_system, system_hydrogen_purchased
 from warnings import filterwarnings; filterwarnings('ignore')
 
 available_systems = ['sys_ethanol', 'sys_MeOH_water_electrolyzer', 'sys_MeOH_hydrogen_green', 'sys_MeOH_hydrogen_blue', 'sys_MeOH_hydrogen_gray']
@@ -33,9 +29,9 @@ system_element_mapping = {available_systems[0]: {'A', 'A1'},
 #%%
 def create_model(system_name):
     if system_name == available_systems[0]:
-        system = create_cellulosic_ethanol_system('sys_ethanol_cs')
+        system = CCU.create_cellulosic_ethanol_system('sys_ethanol_cs')
     elif system_name == available_systems[1]:
-        system = create_full_MeOH_system(water_electrolyzer=True)
+        system = CCU.create_full_MeOH_system(water_electrolyzer=True)
         @system.flowsheet.PWC.add_specification(run=True)
         def update_water_streams():
             u = system.flowsheet.unit
@@ -47,20 +43,20 @@ def create_model(system_name):
                                                    u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
                                                        u.CIP.ins[0], u.FWT.ins[0])
     elif system_name == available_systems[2]:
-        system = system_hydrogen_purchased('sys_MeOH_hydrogen_green', water_electrolyzer=False, hydrogen_green=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_green', water_electrolyzer=False, hydrogen_green=True)
     elif system_name == available_systems[3]:
-        system = system_hydrogen_purchased('sys_MeOH_hydrogen_blue', water_electrolyzer=False, hydrogen_blue=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_blue', water_electrolyzer=False, hydrogen_blue=True)
     elif system_name == available_systems[4]:
-        system = system_hydrogen_purchased('sys_MeOH_hydrogen_gray', water_electrolyzer=False, hydrogen_gray=True)
+        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_gray', water_electrolyzer=False, hydrogen_gray=True)
     
-    load_preferences_and_process_settings(T='K',
+    CCU.load_preferences_and_process_settings(T='K',
                                           flow_units='kg/hr',
                                           N=100,
                                           P_units='Pa',
                                           CE=798, # Average 2023 https://toweringskills.com/financial-analysis/cost-indices/
                                           indicator='GWP100',
-                                          electricity_EI=CFs['GWP_100']['Electricity'],
-                                          electricity_price=price['Electricity'])
+                                          electricity_EI=CCU.CFs['GWP_100']['Electricity'],
+                                          electricity_price=CCU.price['Electricity'])
     u = system.flowsheet.unit
     s = system.flowsheet.stream
     
@@ -152,7 +148,7 @@ def create_model(system_name):
     # =============================================================================
     get_flow_tpd = lambda: (feedstock.F_mass-feedstock.imass['H2O'])*24/907.185
 
-    tea = EtOH_TEA(system=system, IRR=0.10, duration=(2023, 2053),
+    tea = CCU.EtOH_TEA(system=system, IRR=0.10, duration=(2023, 2053),
                    depreciation='MACRS7', income_tax=0.35, operating_days=0.9*365,
                    lang_factor=None, construction_schedule=(0.08, 0.60, 0.32),
                    startup_months=3, startup_FOCfrac=1, startup_salesfrac=0.5,
@@ -184,8 +180,8 @@ def create_model(system_name):
     else:
         by_products = [s.MeOH] 
 
-    lca = create_CCU_lca(system=system,
-                         CFs=CFs,
+    lca = CCU.create_CCU_lca(system=system,
+                         CFs=CCU.CFs,
                          feedstock=feedstock,
                          feedstock_ID=feedstock_ID,
                          main_product=product_stream,
@@ -381,7 +377,7 @@ def create_model(system_name):
     namespace_dict['feedstock'] = feedstock
     
     namespace_dict['tea'] = tea
-    namespace_dict['CFs'] = CFs
+    namespace_dict['CFs'] = CCU.CFs
 
     PowerUtility = bst.PowerUtility
     namespace_dict['PowerUtility'] = PowerUtility
@@ -451,113 +447,114 @@ def create_model(system_name):
 
 #%% Generate parameters and samples
 
-EtOH_MeOH_filepath = EtOH.__file__.replace('\\__init__.py', '')
-input_folder = os.path.join(EtOH_MeOH_filepath, 'analyses', 'parameter_distributions')
-os.makedirs(input_folder, exist_ok=True)
-
-full_parameter_distributions_filename = 'parameter-distributions_full.xlsx'
-full_parameter_distributions_filepath = os.path.join(input_folder, full_parameter_distributions_filename)
-
-# Read the table
-dist_table  = pd.read_excel(full_parameter_distributions_filepath)
-
-param_names = dist_table['Parameter name'].tolist()
-elements = dist_table['Element'].tolist()
-
-distributions = []
-
-for _, row in dist_table.iterrows():
-    shape = row['Shape'].strip().lower()
-    lower = row['Lower']
-    upper = row['Upper']
-
-    if shape == 'triangular':
-        mode = row['Midpoint']
-        dist = cp.Triangle(lower, mode, upper)
-    elif shape == 'uniform':
-        dist = cp.Uniform(lower, upper)
-    else:
-        raise ValueError(f"Unsupported shape: {shape}")
-
-    distributions.append(dist)
-
-# Generate N Latin Hypercube samples
-N = 20
-joint_dist = cp.J(*distributions)
-samples = joint_dist.sample(size=N, rule='L', seed=3221)
-sample_df = pd.DataFrame(samples.T)
-
-# Shift samples one column right by adding empty column at index 0
-sample_df.insert(0, 'Empty', '')
-
-# Create column A data for sample indices (rows 2 onward)
-sample_indices = list(range(1, N + 1))
-
-# Prepare metadata rows (row 0 and 1) with empty first cell for alignment
-row1 = ['Element'] + elements
-row2 = ['Parameter name'] + param_names
-
-# Build full data as list of lists
-output_data = [row1, row2]
-
-# Append samples with index in column A
-for i, sample_row in enumerate(sample_df.values, start=1):
-    # replace first cell (empty) with index i
-    sample_row[0] = i
-    output_data.append(sample_row.tolist())
-
-# Convert to DataFrame and export
-output_df = pd.DataFrame(output_data)
-output_filename = f'{N}_full_samples.xlsx'
-output_path = os.path.join(input_folder, output_filename)
-output_df.to_excel(output_path, index=False, header=False)
-
-#%%
-from datetime import datetime
-
-EtOH_MeOH_results_filepath = EtOH_MeOH_filepath + '\\analyses\\results\\'
-
-dateTimeObj = datetime.now()
-
-minute = '0' + str(dateTimeObj.minute) if len(str(dateTimeObj.minute))==1 else str(dateTimeObj.minute)
-
-def run_model(sys_name, notify_runs=10):
-    model = create_model(system_name=sys_name)
+if __name__ == '__main__':
+    EtOH_MeOH_filepath = CCU.EtOH.__file__.replace('\\__init__.py', '')
+    input_folder = os.path.join(EtOH_MeOH_filepath, 'analyses', 'parameter_distributions')
+    os.makedirs(input_folder, exist_ok=True)
     
-    allowed_elements = system_element_mapping.get(sys_name, set())
-
-    # Filter parameter names based on element
-    allowed_param_names = [
-        name for name, elem in zip(param_names, elements)
-        if elem in allowed_elements
-    ]
-
-    sample_columns = ['Parameter name'] + param_names
-    param_col_indices = [
-        sample_columns.index(pname)
-        for pname in allowed_param_names
-    ]
-
-    # Sample rows (skip metadata rows 0 and 1)
-    sample_list = []
-    for i in range(2, N + 2):  # row index in output_df
-        row = output_df.iloc[i]
-        sample_row = [row[j] for j in param_col_indices]
-        sample_list.append(sample_row)
+    full_parameter_distributions_filename = 'parameter-distributions_full.xlsx'
+    full_parameter_distributions_filepath = os.path.join(input_folder, full_parameter_distributions_filename)
+    
+    # Read the table
+    dist_table  = pd.read_excel(full_parameter_distributions_filepath)
+    
+    param_names = dist_table['Parameter name'].tolist()
+    elements = dist_table['Element'].tolist()
+    
+    distributions = []
+    
+    for _, row in dist_table.iterrows():
+        shape = row['Shape'].strip().lower()
+        lower = row['Lower']
+        upper = row['Upper']
+    
+        if shape == 'triangular':
+            mode = row['Midpoint']
+            dist = cp.Triangle(lower, mode, upper)
+        elif shape == 'uniform':
+            dist = cp.Uniform(lower, upper)
+        else:
+            raise ValueError(f"Unsupported shape: {shape}")
+    
+        distributions.append(dist)
+    
+    # Generate N Latin Hypercube samples
+    N = 20
+    joint_dist = cp.J(*distributions)
+    samples = joint_dist.sample(size=N, rule='L', seed=3221)
+    sample_df = pd.DataFrame(samples.T)
+    
+    # Shift samples one column right by adding empty column at index 0
+    sample_df.insert(0, 'Empty', '')
+    
+    # Create column A data for sample indices (rows 2 onward)
+    sample_indices = list(range(1, N + 1))
+    
+    # Prepare metadata rows (row 0 and 1) with empty first cell for alignment
+    row1 = ['Element'] + elements
+    row2 = ['Parameter name'] + param_names
+    
+    # Build full data as list of lists
+    output_data = [row1, row2]
+    
+    # Append samples with index in column A
+    for i, sample_row in enumerate(sample_df.values, start=1):
+        # replace first cell (empty) with index i
+        sample_row[0] = i
+        output_data.append(sample_row.tolist())
+    
+    # Convert to DataFrame and export
+    output_df = pd.DataFrame(output_data)
+    output_filename = f'{N}_full_samples.xlsx'
+    output_path = os.path.join(input_folder, output_filename)
+    output_df.to_excel(output_path, index=False, header=False)
+    
+    #%%
+    from datetime import datetime
+    
+    EtOH_MeOH_results_filepath = EtOH_MeOH_filepath + '\\analyses\\results\\'
+    
+    dateTimeObj = datetime.now()
+    
+    minute = '0' + str(dateTimeObj.minute) if len(str(dateTimeObj.minute))==1 else str(dateTimeObj.minute)
+    
+    def run_model(sys_name, notify_runs=10):
+        model = create_model(system_name=sys_name)
         
-    sample_array = np.array(sample_list)
+        allowed_elements = system_element_mapping.get(sys_name, set())
     
-    model.load_samples(sample_array)
+        # Filter parameter names based on element
+        allowed_param_names = [
+            name for name, elem in zip(param_names, elements)
+            if elem in allowed_elements
+        ]
     
-    model.evaluate(notify=notify_runs)
-    df_rho,df_p = model.spearman_r()
+        sample_columns = ['Parameter name'] + param_names
+        param_col_indices = [
+            sample_columns.index(pname)
+            for pname in allowed_param_names
+        ]
     
-    file_to_save = EtOH_MeOH_results_filepath\
-        +'_' + sys_name + '_%s.%s.%s-%s.%s'%(dateTimeObj.year, dateTimeObj.month, dateTimeObj.day, dateTimeObj.hour, minute)\
-        + '_' + '_' + str(N) + 'sims'
-
-    with pd.ExcelWriter(file_to_save+'_'+'_1_full_evaluation.xlsx') as writer:
-        model.table.to_excel(writer, sheet_name='Raw data')
-        df_rho.to_excel(writer, sheet_name='rho')
-        df_p.to_excel(writer, sheet_name='p')
+        # Sample rows (skip metadata rows 0 and 1)
+        sample_list = []
+        for i in range(2, N + 2):  # row index in output_df
+            row = output_df.iloc[i]
+            sample_row = [row[j] for j in param_col_indices]
+            sample_list.append(sample_row)
+            
+        sample_array = np.array(sample_list)
+        
+        model.load_samples(sample_array)
+        
+        model.evaluate(notify=notify_runs)
+        df_rho,df_p = model.spearman_r()
+        
+        file_to_save = EtOH_MeOH_results_filepath\
+            +'_' + sys_name + '_%s.%s.%s-%s.%s'%(dateTimeObj.year, dateTimeObj.month, dateTimeObj.day, dateTimeObj.hour, minute)\
+            + '_' + '_' + str(N) + 'sims'
+    
+        with pd.ExcelWriter(file_to_save+'_'+'_1_full_evaluation.xlsx') as writer:
+            model.table.to_excel(writer, sheet_name='Raw data')
+            df_rho.to_excel(writer, sheet_name='rho')
+            df_p.to_excel(writer, sheet_name='p')
         
