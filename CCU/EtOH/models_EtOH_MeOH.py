@@ -31,6 +31,7 @@ def create_model(system_name):
         system = CCU.create_ethanol_system(ID='sys_ethanol_cs')
     elif system_name == available_systems[1]:
         system = CCU.create_full_system(water_electrolyzer=True)
+        system.flowsheet.BT.satisfy_system_electricity_demand=False
         @system.flowsheet.PWC.add_specification(run=True)
         def update_water_streams():
             u = system.flowsheet.unit
@@ -443,7 +444,7 @@ def create_model(system_name):
             str_e = str(e).lower()
             print('Error in model spec: %s'%str_e)
             run_bugfix_barrage()
-    # model.specification = model_specification()
+    model.specification = model_specification()
     return model
 
 #%% Generate parameters and samples
@@ -480,7 +481,7 @@ if __name__ == '__main__':
         distributions.append(dist)
     
     # Generate N Latin Hypercube samples
-    N = 40
+    N = 1000
     joint_dist = cp.J(*distributions)
     samples = joint_dist.sample(size=N, rule='L', seed=3221)
     sample_df = pd.DataFrame(samples.T)
