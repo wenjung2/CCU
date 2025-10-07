@@ -379,7 +379,7 @@ def create_model(system_name):
     namespace_dict['feedstock'] = feedstock
     
     namespace_dict['tea'] = tea
-    namespace_dict['CFs'] = CCU.CFs
+    namespace_dict['lca'] = lca
 
     PowerUtility = bst.PowerUtility
     namespace_dict['PowerUtility'] = PowerUtility

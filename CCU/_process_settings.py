@@ -223,7 +223,7 @@ GWP_CFs = {
     'Lime': 1.29,
     # 'makeup_RO_water': 0.00587, # ecoinvent 3.8 market for water, ultrapure (RoW)
     # 'makeup_process_water': 0.00102, # ecoinvent 3.8 market for tap water (RoW, industrial or household), RoW
-    'CaO': 10+1, # catalyst_MeOH; production+disposal, assume prodution=10, disposal=1, based on similar chemicalss
+    'CaSO4': 10+1, # catalyst_MeOH; production+disposal, assume prodution=10, disposal=1, based on similar chemicalss
     'CH4': 0.40, # NA NG from shale and conventional recovery
     # 'electricity': 0.435, # in kg CO2-eq/kWh https://www.eia.gov/tools/faqs/faq.php?id=74&t=11
     'Electricity': 0.011, # wind; https://www.energy.gov/eere/wind/articles/how-wind-can-help-us-breathe-easier#:~:text=In%20general%2C%20lifecycle%20greenhouse%20gas,2%2FkWh%20for%20natural%20gas.
