@@ -28,11 +28,11 @@ ParallelRxn = tmo.reaction.ParallelReaction
 # =============================================================================
 # Model H2 production by H2O => H2 + 0.5O2
 @cost(basis='Hydrogen flow rate', ID='Stack', S=500000/24, cost=346378000, 
-      CE=CEPCI_by_year[2020], n=0.6, BM=1.01, lifetime=10)
+      CE=CEPCI_by_year[2020], n=1, BM=1.01, lifetime=10)
 @cost('Hydrogen flow rate', 'Mechanical BOP', S=500000/24, cost=181172000, 
-      CE=CEPCI_by_year[2020], n=0.6, BM=1.38)
+      CE=CEPCI_by_year[2020], n=1, BM=1.38)
 @cost('Hydrogen flow rate', 'Electrical BOP', S=500000/24, cost=155982000, 
-      CE=CEPCI_by_year[2020], n=0.6, BM=1.05)
+      CE=CEPCI_by_year[2020], n=1, BM=1.05)
 class Electrolyzer(Unit): 
     _N_ins = 1
     _N_outs = 2

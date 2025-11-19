@@ -221,6 +221,7 @@ GWP_CFs = {
     'MEA': 3.4062, # ecoinvent 3.8 ethanolamine production, RoW [monoethanolamine]
     'NaOH': 2.11,
     'Lime': 1.29,
+    'CalciumDihydroxide': 1.29/74*56,
     # 'makeup_RO_water': 0.00587, # ecoinvent 3.8 market for water, ultrapure (RoW)
     # 'makeup_process_water': 0.00102, # ecoinvent 3.8 market for tap water (RoW, industrial or household), RoW
     'CaSO4': 10+1, # catalyst_MeOH; production+disposal, assume prodution=10, disposal=1, based on similar chemicalss

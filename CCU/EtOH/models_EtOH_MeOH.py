@@ -17,20 +17,26 @@ from biosteam.evaluation._model import create_function
 import CCU
 from warnings import filterwarnings; filterwarnings('ignore')
 
-available_systems = ['sys_ethanol', 'sys_MeOH_water_electrolyzer', 'sys_MeOH_hydrogen_green', 'sys_MeOH_hydrogen_blue', 'sys_MeOH_hydrogen_gray']
+available_systems = ['sys_ethanol_conventional', 'sys_ethanol_renewable', # in terms of electricity
+                     'sys_MeOH_water_electrolyzer_renewable', 'sys_MeOH_water_electrolyzer_NG',
+                     'sys_MeOH_hydrogen_conventional', 'sys_MeOH_hydrogen_renewable']
 
-system_element_mapping = {available_systems[0]: {'A', 'A1'},
-                          available_systems[1]: {'A', 'B', 'C1'},
-                          available_systems[2]: {'A', 'A1', 'B', 'C2'},
-                          available_systems[3]: {'A', 'A1', 'B', 'C3'},
-                          available_systems[4]: {'A', 'A1', 'B', 'C4'},}
+system_element_mapping = {available_systems[0]: {'A', 'D1'},
+                          available_systems[1]: {'A', 'D2'},
+                          available_systems[2]: {'A', 'B', 'C1', 'D2'},
+                          available_systems[3]: {'A', 'B', 'C1', 'D1'},
+                          available_systems[4]: {'A', 'B', 'C2', 'D1'},
+                          available_systems[5]: {'A', 'B', 'C3', 'D1'},
+                          }
 
 #%%
 def create_model(system_name):
     if system_name == available_systems[0]:
-        system = CCU.create_ethanol_system(ID='sys_ethanol_cs')
+        system = CCU.create_ethanol_system(ID='sys_ethanol_conventional')
     elif system_name == available_systems[1]:
-        system = CCU.create_full_system(water_electrolyzer=True)
+        system = CCU.create_ethanol_system(ID='sys_ethanol_renewable')
+    elif system_name == available_systems[2]:
+        system = CCU.create_full_system(ID='sys_MeOH_water_electrolyzer_renewable', water_electrolyzer=True)
         system.flowsheet.BT.satisfy_system_electricity_demand=False
         @system.flowsheet.PWC.add_specification(run=True)
         def update_water_streams():
@@ -42,12 +48,24 @@ def create_model(system_name):
                                                s.saccharification_water, s.stripping_water,\
                                                    u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
                                                        u.CIP.ins[0], u.FWT.ins[0])
-    elif system_name == available_systems[2]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_green', water_electrolyzer=False)
     elif system_name == available_systems[3]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_blue', water_electrolyzer=False)
+        system = CCU.create_full_system(ID='sys_MeOH_water_electrolyzer_NG', water_electrolyzer=True)
+        system.flowsheet.BT.satisfy_system_electricity_demand=True
+        @system.flowsheet.PWC.add_specification(run=True)
+        def update_water_streams():
+            u = system.flowsheet.unit
+            s = system.flowsheet.stream
+            u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+            u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
+                                           s.pretreatment_steam, s.warm_process_water_2,\
+                                               s.saccharification_water, s.stripping_water,\
+                                                   u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
+                                                       u.CIP.ins[0], u.FWT.ins[0])
     elif system_name == available_systems[4]:
-        system = CCU.system_hydrogen_purchased('sys_MeOH_hydrogen_gray', water_electrolyzer=False)
+        system = CCU.system_hydrogen_purchased(ID='sys_MeOH_hydrogen_conventional', water_electrolyzer=False)
+    elif system_name == available_systems[5]:
+        system = CCU.system_hydrogen_purchased(ID='sys_MeOH_hydrogen_renewable', water_electrolyzer=False)
+    
     
     CCU.load_preferences_and_process_settings(T='K',
                                           flow_units='kg/hr',
@@ -169,31 +187,34 @@ def create_model(system_name):
     # create LCA
     # =============================================================================
                                   
-    if system_name == available_systems[0]:
+    if system_name == available_systems[0] or system_name == available_systems[1]:
+        CCU.CFs['GWP_100']['O2'] = 0
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL,
                                          s.natural_gas, s.denaturant)
         by_products = []  # No coproducts for ethanol system
-    elif system_name == available_systems[1]:
+    elif system_name == available_systems[2] or system_name == available_systems[3]:
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
                                          s.natural_gas, s.denaturant)
         by_products = [s.MeOH, s.oxygen]  # MeOH and O2
     else:
+        CCU.CFs['GWP_100']['O2'] = 0
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
                                          s.natural_gas, s.denaturant)
         by_products = [s.MeOH] 
 
     lca = CCU.create_CCU_lca(system=system,
-                         CFs=CCU.CFs,
-                         feedstock=feedstock,
-                         feedstock_ID=feedstock_ID,
-                         main_product=product_stream,
-                         main_product_chemical_IDs=['Ethanol'],
-                         by_products=by_products,
-                         cooling_tower=u.CT,
-                         chilled_water_processing_units=u.CWP,
-                         boiler=u.BT, has_turbogenerator=True,
-                         add_EOL_GWP=True,
-                         input_biogenic_carbon_streams=input_biogenic_carbon_streams)
+                             CFs=CCU.CFs,
+                             feedstock=feedstock,
+                             feedstock_ID=feedstock_ID,
+                             main_product=product_stream,
+                             main_product_chemical_IDs=['Ethanol'],
+                             by_products=by_products,
+                             cooling_tower=u.CT,
+                             chilled_water_processing_units=u.CWP,
+                             boiler=u.BT, has_turbogenerator=True,
+                             add_EOL_GWP=True,
+                             input_biogenic_carbon_streams=input_biogenic_carbon_streams)
+                         
 
     # =============================================================================
     # Metrics
@@ -202,19 +223,21 @@ def create_model(system_name):
     all_products = [product_stream] + by_products
     emissions = [i for i in s if i.source and not i.sink and i not in all_products]
     
-    get_natural_gas_in = lambda: system.flowsheet.BT.ins[3].imass['CH4']
     get_C_flow_in = lambda: sum([i.get_atomic_flow('C') for i in system.feeds])
     get_C_flow_feedstock = lambda: feedstock.get_atomic_flow('C')
+    get_natural_gas_in = lambda: system.flowsheet.BT.ins[3].get_atomic_flow('C')
     
-    get_C_flow_out = lambda: sum([i.get_atomic_flow('C') for i in system.products])
+    check_C_balance = lambda: lca.system_carbon_balance
     
-    check_C_balance = lambda: get_C_flow_out() / get_C_flow_in()
-    
-    # get_CO2_emissions = lambda: sum([i.imass.get('CO2', 0) for i in emissions])
+    get_C_emissions = lambda: sum([i.get_atomic_flow('C') for i in emissions])
     
     get_C_flow_product = lambda: sum([i.get_atomic_flow('C') for i in all_products])
+    get_C_flow_product_main = lambda: product_stream.get_atomic_flow('C')
+    # get_C_flow_product_by = lambda: sum([i.get_atomic_flow('C') for i in by_products])
     
+    get_C_emissions_per_product = lambda: get_C_emissions() / get_C_flow_product_main()
     get_carbon_efficiency = lambda: get_C_flow_product() / get_C_flow_feedstock()
+    get_carbon_efficiency_total = lambda:  get_C_flow_product() / get_C_flow_in()
     
     # 1. TEA
     def get_MSP():
@@ -236,7 +259,9 @@ def create_model(system_name):
     get_overall_AOC = lambda: tea.AOC / 1e6
     get_material_cost = lambda: (tea.material_cost + abs(s.ash.F_mass * s.ash.price)) / 1e6
     get_overall_FOC = lambda: tea.FOC / 1e6
-
+    
+    get_hydrogen_AOC = lambda: s.hydrogen.cost * get_annual_factor() / 1e6
+    get_NG_AOC = lambda: s.natural_gas.cost * get_annual_factor() / 1e6
     # annual sale revenue from products, note that electricity credit is not included,
     # but negative sales from waste disposal are included
     # (i.e., wastes are products of negative selling price)
@@ -248,10 +273,17 @@ def create_model(system_name):
     
 
     metrics = [Metric('Carbon balance', check_C_balance, '', 'Carbon'),
-               Metric('Natural gas in', get_natural_gas_in, '', 'Carbon'),
-               # Metric('CO2 emissions', get_CO2_emissions, 'kg', 'Carbon'),
-               Metric('Carbon useful', get_C_flow_product, 'kg', 'Carbon'),
+               Metric('Carbon in', get_C_flow_in, 'kmol', 'Carbon'),
+               Metric('Carbon feedstock', get_C_flow_feedstock, 'kmol', 'Carbon'),
+               Metric('Carbon natural gas', get_natural_gas_in, 'kmol', 'Carbon'),
+              
+               Metric('Carbon products', get_C_flow_product, 'kmol', 'Carbon'),
+               Metric('Carbon main products', get_C_flow_product_main, 'kmol', 'Carbon'),
+               Metric('Carbon emissions per product', get_C_emissions_per_product, 'kmol/kmol', 'Carbon'),
+               
                Metric('Carbon use efficiency', get_carbon_efficiency, '', 'Carbon'),
+               Metric('Carbon use efficiency total', get_carbon_efficiency_total, '', 'Carbon'),
+               
                Metric('Minimum selling price', get_MSP, '$/kg', 'TEA'),
                Metric('Production rate', get_yield, '10^6 kg/yr', 'TEA'),
                Metric('Product purity', get_purity, '%', 'TEA'),
@@ -262,39 +294,30 @@ def create_model(system_name):
                Metric('Annual operating cost (incl. electricity credit)', get_overall_AOC, '10^6 $/yr', 'TEA'),
                Metric('Annual material cost (incl. boiler ash disposal)', get_material_cost, '10^6 $/yr', 'TEA'),
                Metric('Fixed operating cost', get_overall_FOC, '10^6 $/yr', 'TEA'),
+               Metric('NG cost', get_NG_AOC, '10^6 $/yr', 'TEA'),
                Metric('Annual product sale (excl. electricity)', get_annual_sale, '10^6 $/yr', 'TEA'),
                Metric('Annual electricity output', get_excess_electricity, 'kWh/yr', 'TEA'),
                Metric('Annual electricity revenue', get_electricity_revenue, '10^6 $/yr', 'TEA'),]
                       
-               
-        
+    
+    for i in process_groups: i.autofill_metrics(shorthand=False, 
+                                                electricity_production=False, 
+                                                electricity_consumption=True,
+                                                material_cost=True)
+    metrics_labels_dict = {
+        'Installed cost':(0, '10^6 $'), 
+        'Material cost':(4,'USD/h'), 
+        'Cooling duty':(1,'GJ/h'), 
+        'Heating duty':(2,'GJ/h'), 
+        'Electricity usage':(3, 'MW'),}
+    
+    for m, u_i in metrics_labels_dict.items():
+        for ug in process_groups:
+            metrics.append(Metric(ug.name, ug.metrics[u_i[0]], u_i[1], m))
 
-    # Installed equipment cost
-    metrics.extend((Metric('Ethanol_production - installed equipment cost',
-                           lambda:process_groups_dict['ethanol_production'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('Methanol_production - installed equipment cost',
-                           lambda:process_groups_dict['methanol_production'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('WWT - installed equipment cost',
-                           lambda:process_groups_dict['WWT'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('BT - installed equipment cost',
-                           lambda:process_groups_dict['BT'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('CT - installed equipment cost',
-                           lambda:process_groups_dict['CT'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('CWP - installed equipment cost',
-                           lambda:process_groups_dict['CWP'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('PWC - installed equipment cost',
-                           lambda:process_groups_dict['PWC'].get_installed_cost(),
-                           '10^6 $'),))
-    metrics.extend((Metric('other_OSBL - installed equipment cost',
-                           lambda:process_groups_dict['other_OSBL'].get_installed_cost(),
-                           '10^6 $'),))
-    if system_name in [available_systems[1]]:
+
+        
+    if system_name in [available_systems[2]]:
         # Changes in TEA
         get_electricity_input = lambda: (system.get_electricity_consumption() - system.get_electricity_production()) / get_annual_factor() # kWh per hour
         get_annual_electricity_cost = lambda: (system.get_electricity_consumption() - system.get_electricity_production()) * bst.PowerUtility.price / 1e6
@@ -312,28 +335,37 @@ def create_model(system_name):
         pass
 
     # 2. LCA
-    if system_name == available_systems[0]:
+    if system_name == available_systems[0] or system_name == available_systems[1]:
         get_GWP = lambda: lca.GWP
         get_material_GWP = lambda: lca.material_GWP
         get_other_materials_GWP = lambda: get_material_GWP() - lca.material_GWP_breakdown['CSL'] -\
             lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
                 lca.material_GWP_breakdown['Cellulase']
-    elif system_name == available_systems[1]:
+    elif system_name == available_systems[2] or system_name == available_systems[3]:
         get_GWP = lambda: lca.GWP - lca.material_GWP_breakdown['O2']
         get_material_GWP = get_material_GWP_no_O2 = lambda: lca.material_GWP - lca.material_GWP_breakdown['O2']
         get_other_materials_GWP = lambda: get_material_GWP_no_O2() -\
             lca.material_GWP_breakdown['CSL'] - lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
                 lca.material_GWP_breakdown['MEA'] - lca.material_GWP_breakdown['Cellulase']
+        Metric('H2 cost', get_hydrogen_AOC, '10^6 $/yr', 'TEA'),
         metrics.append(Metric('GWP100a - Coproduct credit - Methanol', lambda: lca.GWP_byproduct_credit(0), 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('GWP100a - Coproduct credit - O2', lambda: lca.GWP_byproduct_credit(1), 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('GWP100a - Coproduct credit - total', lambda: lca.GWP_byproduct_credit_total(), 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP - O2', lambda: CCU.CFs['GWP_100']['O2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Amount - O2', lambda: s.oxygen.imass['O2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Amount - ETOH', lambda: s.ethanol.imass['Ethanol'], 'kg-CO2-eq/kg', 'LCA'))
     else:
         get_GWP = lambda: lca.GWP
         get_material_GWP = lambda: lca.material_GWP
         get_other_materials_GWP = lambda: get_material_GWP() - lca.material_GWP_breakdown['CSL'] -\
             lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
                 lca.material_GWP_breakdown['Cellulase'] - lca.material_GWP_breakdown['H2']
-        metrics.extend((Metric('GWP100a - Materials breakdown - H2', lambda: lca.material_GWP_breakdown['H2'], 'kg-CO2-eq/kg', 'LCA'),))
+        Metric('H2 cost', get_hydrogen_AOC, '10^6 $/yr', 'TEA'),
+        metrics.append(Metric('GWP100a - Coproduct credit - Methanol', lambda: lca.GWP_byproduct_credit(0), 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP100a - Materials breakdown - H2', lambda: lca.material_GWP_breakdown['H2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP - H2', lambda: CCU.CFs['GWP_100']['H2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Amount - H2', lambda: s.hydrogen.imass['H2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Amount - ETOH', lambda: s.ethanol.imass['Ethanol'], 'kg-CO2-eq/kg', 'LCA'))
         
     get_GWP_before_electricity_offset = lambda: get_GWP() - lca.net_electricity_GWP
     
@@ -481,7 +513,7 @@ if __name__ == '__main__':
         distributions.append(dist)
     
     # Generate N Latin Hypercube samples
-    N = 1000
+    N = 10
     joint_dist = cp.J(*distributions)
     samples = joint_dist.sample(size=N, rule='L', seed=3221)
     sample_df = pd.DataFrame(samples.T)
@@ -549,7 +581,9 @@ if __name__ == '__main__':
         model.load_samples(sample_array)
         
         model.evaluate(notify=notify_runs)
-        df_rho,df_p = model.spearman_r()
+    
+
+        df_rho,df_p = model.spearman_r(filter='omit nan')
         
         file_to_save = EtOH_MeOH_results_filepath\
             +'_' + sys_name + '_%s.%s.%s-%s.%s'%(dateTimeObj.year, dateTimeObj.month, dateTimeObj.day, dateTimeObj.hour, minute)\

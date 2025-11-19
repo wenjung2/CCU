@@ -28,7 +28,7 @@ from biorefineries.cellulosic.systems import create_cellulosic_ethanol_system
                         dict(ID='emissions_fermentation', CO2=1),
                         dict(ID='makeup_MEA', H2O=1),
                         dict(ID='makeup_water_1', H2O=1),
-                        dict(ID='hydrogen', H2=1),
+                        dict(ID='hydrogen', H2=1, phase='g'),
                         dict(ID='water_stream_1', H2O=1),
                         dict(ID='catalyst_MeOH', CaSO4=1),],
                    outs=[dict(ID='bottom_water', H2O=1),
@@ -153,7 +153,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None):
     T1101 = bst.StorageTank('T1101', ins=S1104-1, outs=MeOH)
     
     
-def create_full_system(water_electrolyzer=None):
+def create_full_system(ID, water_electrolyzer=None):
     chems = CCU.create_MeOH_chemicals()
     bst.settings.set_thermo(chems, cache=True)
     biorefinery_sys = CCU.create_cellulosic_ethanol_system('sys_ethanol_cs')
@@ -178,7 +178,7 @@ def create_full_system(water_electrolyzer=None):
 
 
 def system_hydrogen_purchased(ID, **kwargs):
-    sys = create_full_system(**kwargs)
+    sys = create_full_system(ID=ID, **kwargs)
     @sys.flowsheet.PWC.add_specification(run=True)
     def update_water_streams():
         u, s = sys.flowsheet.unit, sys.flowsheet.stream
@@ -190,7 +190,6 @@ def system_hydrogen_purchased(ID, **kwargs):
             u.S401.ins[1], u.U1301.ins[2],
             u.CIP.ins[0], u.FWT.ins[0]
         )
-    sys.ID = ID
     return sys
 
 
