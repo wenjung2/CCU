@@ -28,6 +28,8 @@ system_element_mapping = {available_systems[0]: {'A', 'D1'},
                           available_systems[4]: {'A', 'B', 'C2', 'D1'},
                           available_systems[5]: {'A', 'B', 'C3', 'D1'},
                           }
+fixed_parameter = 'Electricity unit price (renewable)'
+fixed_value = 0.02
 
 #%%
 def create_model(system_name):
@@ -38,29 +40,29 @@ def create_model(system_name):
     elif system_name == available_systems[2]:
         system = CCU.create_full_system(ID='sys_MeOH_water_electrolyzer_renewable', water_electrolyzer=True)
         system.flowsheet.BT.satisfy_system_electricity_demand=False
-        @system.flowsheet.PWC.add_specification(run=True)
-        def update_water_streams():
-            u = system.flowsheet.unit
-            s = system.flowsheet.stream
-            u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
-            u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
-                                           s.pretreatment_steam, s.warm_process_water_2,\
-                                               s.saccharification_water, s.stripping_water,\
-                                                   u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
-                                                       u.CIP.ins[0], u.FWT.ins[0])
+        # @system.flowsheet.PWC.add_specification(run=True)
+        # def update_water_streams():
+        #     u = system.flowsheet.unit
+        #     s = system.flowsheet.stream
+        #     u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+        #     u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
+        #                                    s.pretreatment_steam, s.warm_process_water_2,\
+        #                                        s.saccharification_water, s.stripping_water,\
+        #                                            u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
+        #                                                u.CIP.ins[0], u.FWT.ins[0])
     elif system_name == available_systems[3]:
         system = CCU.create_full_system(ID='sys_MeOH_water_electrolyzer_NG', water_electrolyzer=True)
         system.flowsheet.BT.satisfy_system_electricity_demand=True
-        @system.flowsheet.PWC.add_specification(run=True)
-        def update_water_streams():
-            u = system.flowsheet.unit
-            s = system.flowsheet.stream
-            u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
-            u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
-                                           s.pretreatment_steam, s.warm_process_water_2,\
-                                               s.saccharification_water, s.stripping_water,\
-                                                   u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
-                                                       u.CIP.ins[0], u.FWT.ins[0])
+        # @system.flowsheet.PWC.add_specification(run=True)
+        # def update_water_streams():
+        #     u = system.flowsheet.unit
+        #     s = system.flowsheet.stream
+        #     u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+        #     u.PWC.process_water_streams = (s.warm_process_water_1, s.ammonia_process_water,\
+        #                                    s.pretreatment_steam, s.warm_process_water_2,\
+        #                                        s.saccharification_water, s.stripping_water,\
+        #                                            u.S401.ins[1], u.R1101.ins[0], u.U1301.ins[2],\
+        #                                                u.CIP.ins[0], u.FWT.ins[0])
     elif system_name == available_systems[4]:
         system = CCU.system_hydrogen_purchased(ID='sys_MeOH_hydrogen_conventional', water_electrolyzer=False)
     elif system_name == available_systems[5]:
@@ -166,7 +168,21 @@ def create_model(system_name):
     # =============================================================================
     get_flow_tpd = lambda: (feedstock.F_mass-feedstock.imass['H2O'])*24/907.185
 
-    tea = CCU.EtOH_TEA(system=system, IRR=0.10, duration=(2023, 2053),
+    # tea = CCU.EtOH_TEA(system=system, IRR=0.10, duration=(2023, 2053),
+    #                depreciation='MACRS7', income_tax=0.35, operating_days=0.9*365,
+    #                lang_factor=None, construction_schedule=(0.08, 0.60, 0.32),
+    #                startup_months=3, startup_FOCfrac=1, startup_salesfrac=0.5,
+    #                startup_VOCfrac=0.75, WC_over_FCI=0.05, finance_interest=0.08,
+    #                finance_years=10, finance_fraction=0.6, 
+    #                OSBL_units=(u.BT, u.CT, u.CWP, u.PWC, u.ADP, u.FWT, u.CIP),
+    #                warehouse=0.04, site_development=0.09, additional_piping=0.045,
+    #                proratable_costs=0.10, field_expenses=0.10, construction=0.20,
+    #                contingency=0.10, other_indirect_costs=0.10, 
+    #                labor_cost=3651112*get_flow_tpd()/2205,
+    #                labor_burden=0.9, property_insurance=0.007, maintenance=0.03,
+    #                steam_power_depreciation='MACRS20', boiler_turbogenerator=u.BT)
+    
+    tea = CCU.CellulosicIncentivesTEA(system=system, IRR=0.10, duration=(2023, 2053),
                    depreciation='MACRS7', income_tax=0.35, operating_days=0.9*365,
                    lang_factor=None, construction_schedule=(0.08, 0.60, 0.32),
                    startup_months=3, startup_FOCfrac=1, startup_salesfrac=0.5,
@@ -178,7 +194,9 @@ def create_model(system_name):
                    contingency=0.10, other_indirect_costs=0.10, 
                    labor_cost=3651112*get_flow_tpd()/2205,
                    labor_burden=0.9, property_insurance=0.007, maintenance=0.03,
-                   steam_power_depreciation='MACRS20', boiler_turbogenerator=u.BT)
+                   steam_power_depreciation='MACRS20', boiler_turbogenerator=u.BT,
+                   carbon_credit=85, credit_years=12,)
+                   
     
     system.operating_hours = tea.operating_days * 24
     get_annual_factor = lambda: tea.operating_days * 24
@@ -218,28 +236,8 @@ def create_model(system_name):
 
     # =============================================================================
     # Metrics
-    # =============================================================================
-    # 0. Carbon use efficiency
-    all_products = [product_stream] + by_products
-    emissions = [i for i in s if i.source and not i.sink and i not in all_products]
-    
-    get_C_flow_in = lambda: sum([i.get_atomic_flow('C') for i in system.feeds])
-    get_C_flow_feedstock = lambda: feedstock.get_atomic_flow('C')
-    get_natural_gas_in = lambda: system.flowsheet.BT.ins[3].get_atomic_flow('C')
-    
-    check_C_balance = lambda: lca.system_carbon_balance
-    
-    get_C_emissions = lambda: sum([i.get_atomic_flow('C') for i in emissions])
-    
-    get_C_flow_product = lambda: sum([i.get_atomic_flow('C') for i in all_products])
-    get_C_flow_product_main = lambda: product_stream.get_atomic_flow('C')
-    # get_C_flow_product_by = lambda: sum([i.get_atomic_flow('C') for i in by_products])
-    
-    get_C_emissions_per_product = lambda: get_C_emissions() / get_C_flow_product_main()
-    get_carbon_efficiency = lambda: get_C_flow_product() / get_C_flow_feedstock()
-    get_carbon_efficiency_total = lambda:  get_C_flow_product() / get_C_flow_in()
-    
-    # 1. TEA
+    # ============================================================================
+    # 0. TEA
     def get_MSP():
         for i in range(3):
             product_price = tea.solve_price(product_stream)
@@ -272,19 +270,7 @@ def create_model(system_name):
     get_electricity_revenue = lambda: get_excess_electricity() * bst.PowerUtility.price / 1e6 # 10^6 $ per year
     
 
-    metrics = [Metric('Carbon balance', check_C_balance, '', 'Carbon'),
-               Metric('Carbon in', get_C_flow_in, 'kmol', 'Carbon'),
-               Metric('Carbon feedstock', get_C_flow_feedstock, 'kmol', 'Carbon'),
-               Metric('Carbon natural gas', get_natural_gas_in, 'kmol', 'Carbon'),
-              
-               Metric('Carbon products', get_C_flow_product, 'kmol', 'Carbon'),
-               Metric('Carbon main products', get_C_flow_product_main, 'kmol', 'Carbon'),
-               Metric('Carbon emissions per product', get_C_emissions_per_product, 'kmol/kmol', 'Carbon'),
-               
-               Metric('Carbon use efficiency', get_carbon_efficiency, '', 'Carbon'),
-               Metric('Carbon use efficiency total', get_carbon_efficiency_total, '', 'Carbon'),
-               
-               Metric('Minimum selling price', get_MSP, '$/kg', 'TEA'),
+    metrics = [Metric('Minimum selling price', get_MSP, '$/kg', 'TEA'),
                Metric('Production rate', get_yield, '10^6 kg/yr', 'TEA'),
                Metric('Product purity', get_purity, '%', 'TEA'),
                Metric('Adjusted minimum selling price', get_adjusted_MSP, '$/kg', 'TEA'),
@@ -298,6 +284,8 @@ def create_model(system_name):
                Metric('Annual product sale (excl. electricity)', get_annual_sale, '10^6 $/yr', 'TEA'),
                Metric('Annual electricity output', get_excess_electricity, 'kWh/yr', 'TEA'),
                Metric('Annual electricity revenue', get_electricity_revenue, '10^6 $/yr', 'TEA'),]
+    
+               
                       
     
     for i in process_groups: i.autofill_metrics(shorthand=False, 
@@ -315,8 +303,77 @@ def create_model(system_name):
         for ug in process_groups:
             metrics.append(Metric(ug.name, ug.metrics[u_i[0]], u_i[1], m))
 
-
+    # 1. Carbon use
+    all_products = [product_stream] + by_products
+    emissions = [i for i in s if i.source and not i.sink and i not in all_products]
+    
+    check_C_balance = lambda: lca.system_carbon_balance
+    
+    get_C_emissions_per_ethanol = lambda: get_C_emissions() / get_C_ethanol()
+    get_carbon_efficiency = lambda: get_C_ethanol() / get_C_feedstock()
+    get_carbon_efficiency_total = lambda: get_C_ethanol() / get_C_in()
+    
+    get_C_in = lambda: sum([i.get_atomic_flow('C') for i in system.feeds])
+    get_C_feedstock = lambda: feedstock.get_atomic_flow('C')
+    get_C_CSL = lambda: system.flowsheet.CSL.get_atomic_flow('C')
+    get_C_cellulase = lambda: system.flowsheet.cellulase.get_atomic_flow('C')
+    get_C_denaturant = lambda: system.flowsheet.denaturant.get_atomic_flow('C')
+    
+    get_C_ethanol = lambda: system.flowsheet.ethanol.get_atomic_flow('C')
+   
+    get_C_emissions = lambda: sum([i.get_atomic_flow('C') for i in emissions])
+    get_C_emissions_fermentation = lambda: system.flowsheet.D401.outs[0].get_atomic_flow('C')
+    get_C_emissions_boiler = lambda: system.flowsheet.BT.outs[0].get_atomic_flow('C')
+    get_C_emissions_WWT = lambda: system.flowsheet.R602.outs[0].get_atomic_flow('C') + system.flowsheet.S604.outs[1].get_atomic_flow('C')
+    
+    
+    
+    metrics.extend((Metric('Carbon balance', check_C_balance, '', 'Carbon'),))
+    metrics.extend((Metric('C emissions per ethanol', get_C_emissions_per_ethanol, '', 'Carbon'),))
+    metrics.extend((Metric('C efficiency', get_carbon_efficiency, '', 'Carbon'),))
+    metrics.extend((Metric('Total C efficiency', get_carbon_efficiency_total, '', 'Carbon'),))
+    metrics.extend((Metric('Total C in', get_C_in, '', 'Carbon'),))
+    metrics.extend((Metric('Feedstock C', get_C_feedstock, '', 'Carbon'),))
+    metrics.extend((Metric('CSL C', get_C_CSL, '', 'Carbon'),))
+    metrics.extend((Metric('Cellulase C', get_C_cellulase, '', 'Carbon'),))
+    metrics.extend((Metric('Denaturant C', get_C_denaturant, '', 'Carbon'),))
+    metrics.extend((Metric('Ethanol C', get_C_ethanol, '', 'Carbon'),))
+    metrics.extend((Metric('Total emissions C', get_C_emissions, '', 'Carbon'),))
+    metrics.extend((Metric('Fermentation emissions C', get_C_emissions_fermentation, '', 'Carbon'),))
+    metrics.extend((Metric('Boiler emissions C', get_C_emissions_boiler, '', 'Carbon'),))
+    metrics.extend((Metric('WWT emissions C', get_C_emissions_WWT, '', 'Carbon'),))
+    
+    # metrics for CCU
+    if system_name in [available_systems[2], available_systems[3], available_systems[4], available_systems[5]]:
         
+        get_S1300_split = lambda: system.flowsheet.S1300.split[0]
+        
+        get_C_fermentation_used = lambda: system.flowsheet.M1302.ins[0].get_atomic_flow('C')
+        get_C_boiler_used = lambda: system.flowsheet.M1302.ins[1].get_atomic_flow('C')
+        get_C_natural_gas = lambda: system.flowsheet.BT.ins[3].get_atomic_flow('C')
+        get_C_methanol = lambda: system.flowsheet.MeOH.get_atomic_flow('C')
+        get_C_emissions_MeOH_offgas = lambda: system.flowsheet.gas_out.get_atomic_flow('C')
+        
+        get_C_emissions_per_ethanol_MeOH = lambda: get_C_emissions() / (get_C_ethanol() + get_C_methanol())
+        
+        get_carbon_efficiency_CCU = lambda:  (get_C_ethanol() + get_C_methanol()) / get_C_feedstock()
+        get_carbon_efficiency_total_CCU = lambda:  (get_C_ethanol() + get_C_methanol()) / get_C_in()
+        
+        get_45Q_incentives = lambda: tea.annual_credit
+        
+        metrics.extend((Metric('S1300 split input', get_S1300_split, '', 'Carbon'),))
+        metrics.extend((Metric('Fermentation C used', get_C_fermentation_used, '', 'Carbon'),))
+        metrics.extend((Metric('Boiler C used', get_C_boiler_used, '', 'Carbon'),))
+        metrics.extend((Metric('Natural gas C', get_C_natural_gas, '', 'Carbon'),))
+        metrics.extend((Metric('MeOH C', get_C_methanol, '', 'Carbon'),))
+        metrics.extend((Metric('MeOH_offgas C', get_C_emissions_MeOH_offgas, '', 'Carbon'),))
+        metrics.extend((Metric('C emissions per ethanol MeOH', get_C_emissions_per_ethanol_MeOH, '', 'Carbon'),))
+        metrics.extend((Metric('C efficiency CCU', get_carbon_efficiency_CCU, '', 'Carbon'),))
+        metrics.extend((Metric('Total C efficiency CCU', get_carbon_efficiency_total_CCU, '', 'Carbon'),))
+        metrics.extend((Metric('CCU incentives', get_45Q_incentives, '', 'Carbon'),))
+    else:
+        pass
+    
     if system_name in [available_systems[2]]:
         # Changes in TEA
         get_electricity_input = lambda: (system.get_electricity_consumption() - system.get_electricity_production()) / get_annual_factor() # kWh per hour
@@ -426,8 +483,9 @@ def create_model(system_name):
         baseline = row['Baseline']
         statement = row['Statement']
 
-        if '= x' not in statement or element not in elements_for_system:
+        if element not in elements_for_system:
             continue
+            
 
         param(name=param_name,
               setter=create_function(statement, namespace), 
@@ -490,14 +548,20 @@ if __name__ == '__main__':
     full_parameter_distributions_filepath = os.path.join(input_folder, full_parameter_distributions_filename)
     
     # Read the table
-    dist_table  = pd.read_excel(full_parameter_distributions_filepath)
+    dist_table  = pd.read_excel(full_parameter_distributions_filepath) 
     
     param_names = dist_table['Parameter name'].tolist()
     elements = dist_table['Element'].tolist()
     
     distributions = []
+    sample_positions = []
     
-    for _, row in dist_table.iterrows():
+    for pos, (_, row) in enumerate(dist_table.iterrows()):
+        name = str(row["Parameter name"]).strip()
+        
+        if name == fixed_parameter:
+            continue
+        
         shape = row['Shape'].strip().lower()
         lower = row['Lower']
         upper = row['Upper']
@@ -511,13 +575,21 @@ if __name__ == '__main__':
             raise ValueError(f"Unsupported shape: {shape}")
     
         distributions.append(dist)
+        sample_positions.append(pos)
     
     # Generate N Latin Hypercube samples
-    N = 10
+    N = 1000
     joint_dist = cp.J(*distributions)
-    samples = joint_dist.sample(size=N, rule='L', seed=3221)
-    sample_df = pd.DataFrame(samples.T)
     
+    rand_samples = joint_dist.sample(size=N, rule="L", seed=3221).T 
+    
+    full_samples = np.empty((N, len(dist_table)), dtype=float)
+    
+    fixed_pos = param_names.index(fixed_parameter)
+    full_samples[:, fixed_pos] = fixed_value
+    for j, pos in enumerate(sample_positions):
+        full_samples[:, pos] = rand_samples[:, j]
+    sample_df = pd.DataFrame(full_samples)
     # Shift samples one column right by adding empty column at index 0
     sample_df.insert(0, 'Empty', '')
     
@@ -580,17 +652,36 @@ if __name__ == '__main__':
         
         model.load_samples(sample_array)
         
-        model.evaluate(notify=notify_runs)
-    
+        # Baseline results
+        baseline_initial = model.metrics_at_baseline()
+        baseline = pd.DataFrame(data=np.array([[i for i in baseline_initial.values],]), 
+                                columns=baseline_initial.keys())
 
-        df_rho,df_p = model.spearman_r(filter='omit nan')
+        model.evaluate(notify=notify_runs)
         
+        # Percentiles
+        percentiles = [0.05, 0.25, 0.50, 0.75, 0.95]
+        percentiles_df = model.table.quantile(q=percentiles)
+        
+        # Spearman's rank correlation
+        df_rho, df_p = model.spearman_r(filter='omit nan')
+        
+        target_indicators = ["Minimum selling price",
+                             "Total gwp100a",]
+        
+        sig_params = CCU.get_significant_params(rho_df=df_rho, p_df = df_p, 
+                                                indicator_filter = target_indicators)
+            
+
         file_to_save = EtOH_MeOH_results_filepath\
             +'_' + sys_name + '_%s.%s.%s-%s.%s'%(dateTimeObj.year, dateTimeObj.month, dateTimeObj.day, dateTimeObj.hour, minute)\
             + '_' + '_' + str(N) + 'sims'
-    
+        # Output to Excel
         with pd.ExcelWriter(file_to_save+'_'+'_1_full_evaluation.xlsx') as writer:
+            baseline.to_excel(writer, sheet_name='Baseline')
+            percentiles_df.to_excel(writer, sheet_name='Percentile results')
+            sig_params.to_excel(writer, sheet_name='Significant parameters')
+            df_rho.to_excel(writer, sheet_name='df_rho')
+            df_rho.to_excel(writer, sheet_name='df_p')
             model.table.to_excel(writer, sheet_name='Raw data')
-            df_rho.to_excel(writer, sheet_name='rho')
-            df_p.to_excel(writer, sheet_name='p')
         

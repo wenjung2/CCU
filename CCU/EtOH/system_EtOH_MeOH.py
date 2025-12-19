@@ -63,7 +63,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None):
         # print(f"{maximum_emissions / new_emissions:.0%}")
     
     U1301 = bst.AmineAbsorption('U1301', ins=(S1300-0, makeup_MEA, makeup_water_1),\
-                                  outs=('vent', 'concentrated'), CO2_recovery=0.8)
+                                  outs=('vent', 'concentrated'), CO2_recovery=1)
     U1301.outs[1].phase = 'g'
     M1302 = bst.Mixer('M1302', ins=(emissions_fermentation, U1301-1), outs='')
     S1301 = bst.Splitter('S1301', ins=M1302-0, outs=('concentrated_CO2', 'other_gases'), split=dict(CO2=1.0))
@@ -136,7 +136,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None):
 
     S1102 = bst.PhaseSplitter('S1102', ins=H1102-0, outs=('gas', 'condensed_water_and_methanol'))
 
-    S1103 = bst.Splitter('S1103', ins=S1102-0, outs=('purge', 'recycled'), split=0.01)
+    S1103 = bst.Splitter('S1103', ins=S1102-0, outs=('purge_2', 'recycled'), split=0.01)
 
     C1104 = bst.IsentropicCompressor('C1104', ins=S1103-1, outs=1-M1102, P=78*101325)
 
@@ -179,17 +179,17 @@ def create_full_system(ID, water_electrolyzer=None):
 
 def system_hydrogen_purchased(ID, **kwargs):
     sys = create_full_system(ID=ID, **kwargs)
-    @sys.flowsheet.PWC.add_specification(run=True)
-    def update_water_streams():
-        u, s = sys.flowsheet.unit, sys.flowsheet.stream
-        u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
-        u.PWC.process_water_streams = (
-            s.warm_process_water_1, s.ammonia_process_water,
-            s.pretreatment_steam, s.warm_process_water_2,
-            s.saccharification_water, s.stripping_water,
-            u.S401.ins[1], u.U1301.ins[2],
-            u.CIP.ins[0], u.FWT.ins[0]
-        )
+    # @sys.flowsheet.PWC.add_specification(run=True)
+    # def update_water_streams():
+    #     u, s = sys.flowsheet.unit, sys.flowsheet.stream
+    #     u.PWC.makeup_water_streams = (u.CT.ins[1], u.BT.ins[2])
+    #     u.PWC.process_water_streams = (
+    #         s.warm_process_water_1, s.ammonia_process_water,
+    #         s.pretreatment_steam, s.warm_process_water_2,
+    #         s.saccharification_water, s.stripping_water,
+    #         u.S401.ins[1], u.U1301.ins[2],
+    #         u.CIP.ins[0], u.FWT.ins[0]
+    #     )
     return sys
 
 
