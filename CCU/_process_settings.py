@@ -230,7 +230,7 @@ GWP_CFs = {
     'Electricity': 0.011, # wind; https://www.energy.gov/eere/wind/articles/how-wind-can-help-us-breathe-easier#:~:text=In%20general%2C%20lifecycle%20greenhouse%20gas,2%2FkWh%20for%20natural%20gas.
     'H2': 3.53,
     'MeOH': 0.58, # ecoinvent 3.8 for methanol production from natural gas
-    'oxygen': 0.1726, # GREET 2022; at gate; production of oxygen
+    'O2': 0.1726, # GREET 2022; at gate; production of oxygen
     # 'H3PO4': 0.86829, # ecoinvent 3.8 market for phosphoric acid, RoW
     # 'polymer': 3.1996, # ecoinvent 3.8 market for polyacrylamide-based anionic flocculants, GLO
     }

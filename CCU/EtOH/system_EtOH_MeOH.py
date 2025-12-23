@@ -32,13 +32,13 @@ from biorefineries.cellulosic.systems import create_cellulosic_ethanol_system
                         dict(ID='water_stream_1', H2O=1),
                         dict(ID='catalyst_MeOH', CaSO4=1),],
                    outs=[dict(ID='bottom_water', H2O=1),
-                         dict(ID='oxygen', O2=1),
+                         dict(ID='O2', O2=1),
                          dict(ID='spent_catalyst', CaSO4=1),
                          dict(ID='gas_out', CO2=1),
                          dict(ID='MeOH', CH3OH=1),])
 def create_ccu_system(ins, outs, water_electrolyzer=None):
     emissions_BT, emissions_fermentation, makeup_MEA, makeup_water_1, hydrogen, water_stream_1, catalyst_MeOH = ins
-    bottom_water, oxygen, spent_catalyst, gas_out, MeOH = outs
+    bottom_water, O2, spent_catalyst, gas_out, MeOH = outs
     
     # capture CO2
     S1300 = bst.Splitter('S1300', ins=emissions_BT, outs=('captured', 'purge'), split=1)
@@ -83,7 +83,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None):
     
     if water_electrolyzer:
         ins.remove(hydrogen)
-        R1101 = CCU.Electrolyzer('R1101', ins=water_stream_1, outs=('', oxygen))
+        R1101 = CCU.Electrolyzer('R1101', ins=water_stream_1, outs=('', O2))
         @R1101.add_specification(run=True)
         def adjust_water_flow():
             U1301.run()
@@ -92,7 +92,7 @@ def create_ccu_system(ins, outs, water_electrolyzer=None):
         C1103 = bst.IsentropicCompressor('C1103', ins=R1101-0, outs='', P=78*101325, vle=True)
     else:
         ins.remove(water_stream_1)
-        outs.remove(oxygen)
+        outs.remove(O2)
         C1103 = bst.IsentropicCompressor('C1103', ins=hydrogen, outs='', P=78*101325, vle=True)
         @C1103.add_specification(run=True)
         def adjust_hydrogen_flow():
@@ -167,7 +167,7 @@ def create_full_system(ID, water_electrolyzer=None):
                                                 'hydrogen',
                                                 'water_stream_1',
                                                 'catalyst_MeOH'],
-                                           outs=['bottom_water', 'oxygen', 'spent_catalyst', 'gas_out', 'MeOH'],
+                                           outs=['bottom_water', 'O2', 'spent_catalyst', 'gas_out', 'MeOH'],
                                                 water_electrolyzer=water_electrolyzer,
                                                 )
     

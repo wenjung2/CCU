@@ -24,12 +24,14 @@ class CellulosicIncentivesTEA(EtOH_TEA):
         
     @property
     def carbon_amount_utilized(self):
-        methanol = self.system.flowsheet.MeOH
-        hours = self.operating_days * 24
-        
-        CO2_utilized = methanol.get_atomic_flow('C') * 32.04 * hours/1000 # in ton/year
-        return CO2_utilized
-    
+        if "MeOH" not in self.system.flowsheet.stream:
+            return 0.0 
+        else:
+            methanol = self.system.flowsheet.MeOH
+            hours = self.operating_days * 24
+            CO2_utilized = methanol.get_atomic_flow('C') * 32.04 * hours/1000 # in ton/year
+            return CO2_utilized
+
     @property
     def annual_credit(self):
         return self.carbon_amount_utilized * self.carbon_credit

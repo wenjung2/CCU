@@ -83,4 +83,5 @@ def create_MeOH_chemicals():
     chems.extend([i for i in cellulosic_ethanol_chems if i.ID not in chems])
     chems.compile()
     chems.set_synonym('Extract','Extractives')
+    chems.set_synonym('CH3OH','MeOH')
     return chems

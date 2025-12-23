@@ -206,18 +206,18 @@ def create_model(system_name):
     # =============================================================================
                                   
     if system_name == available_systems[0] or system_name == available_systems[1]:
-        CCU.CFs['GWP_100']['O2'] = 0
+        CCU.CFs['GWP_100']['O2'] = 0 # set once from dic, not function not param
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL,
-                                         s.natural_gas, s.denaturant)
+                                         s.natural_gas)
         by_products = []  # No coproducts for ethanol system
     elif system_name == available_systems[2] or system_name == available_systems[3]:
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
-                                         s.natural_gas, s.denaturant)
-        by_products = [s.MeOH, s.oxygen]  # MeOH and O2
+                                         s.natural_gas)
+        by_products = [s.MeOH, s.O2]  # MeOH and O2
     else:
         CCU.CFs['GWP_100']['O2'] = 0
         input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
-                                         s.natural_gas, s.denaturant)
+                                         s.natural_gas)
         by_products = [s.MeOH] 
 
     lca = CCU.create_CCU_lca(system=system,
@@ -398,6 +398,21 @@ def create_model(system_name):
         get_other_materials_GWP = lambda: get_material_GWP() - lca.material_GWP_breakdown['CSL'] -\
             lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
                 lca.material_GWP_breakdown['Cellulase']
+        
+        # using energy allocation
+        sec_per_hr = 60 * 60
+        kJ_per_GGE = 120276
+        GGE_electricity = lambda: sec_per_hr/kJ_per_GGE * get_excess_electricity()
+        GGE_ethanol = lambda: s.ethanol.get_property('LHV', 'GGE/hr') * system.operating_hours
+        ethanol_energy_allocation = lambda: GGE_ethanol() / (GGE_electricity() + GGE_ethanol())
+        electricity_energy_allocation = lambda: GGE_electricity() / (GGE_electricity() + GGE_ethanol())
+        
+        ethanol_GWP_by_energy = lambda: get_GWP_before_electricity_offset() * ethanol_energy_allocation()
+        electricity_GWP_by_energy = lambda: get_GWP_before_electricity_offset() * electricity_energy_allocation()
+        
+        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP100a - electricity by allocation', electricity_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        
     elif system_name == available_systems[2] or system_name == available_systems[3]:
         get_GWP = lambda: lca.GWP - lca.material_GWP_breakdown['O2']
         get_material_GWP = get_material_GWP_no_O2 = lambda: lca.material_GWP - lca.material_GWP_breakdown['O2']
@@ -409,8 +424,20 @@ def create_model(system_name):
         metrics.append(Metric('GWP100a - Coproduct credit - O2', lambda: lca.GWP_byproduct_credit(1), 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('GWP100a - Coproduct credit - total', lambda: lca.GWP_byproduct_credit_total(), 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('GWP - O2', lambda: CCU.CFs['GWP_100']['O2'], 'kg-CO2-eq/kg', 'LCA'))
-        metrics.append(Metric('Amount - O2', lambda: s.oxygen.imass['O2'], 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Amount - O2', lambda: s.O2.imass['O2'], 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('Amount - ETOH', lambda: s.ethanol.imass['Ethanol'], 'kg-CO2-eq/kg', 'LCA'))
+        
+        # using hybrid allocation (O2 displaced, MeOH and EtOH energy allocation)
+        GWP_without_EtOH = lambda: get_GWP() + lca.GWP_byproduct_credit(0)
+        ethanol_energy_allocation = lambda: s.ethanol.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        MeOH_energy_allocation = lambda: s.MeOH.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        ethanol_GWP_by_energy = lambda: GWP_without_EtOH() * ethanol_energy_allocation()
+        MeOH_GWP_by_energy = lambda: GWP_without_EtOH() * MeOH_energy_allocation()
+        
+        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
     else:
         get_GWP = lambda: lca.GWP
         get_material_GWP = lambda: lca.material_GWP
@@ -423,6 +450,17 @@ def create_model(system_name):
         metrics.append(Metric('GWP - H2', lambda: CCU.CFs['GWP_100']['H2'], 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('Amount - H2', lambda: s.hydrogen.imass['H2'], 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('Amount - ETOH', lambda: s.ethanol.imass['Ethanol'], 'kg-CO2-eq/kg', 'LCA'))
+        
+        # using energy allocation (MeOH and EtOH)
+        ethanol_energy_allocation = lambda: s.ethanol.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        MeOH_energy_allocation = lambda: s.MeOH.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        ethanol_GWP_by_energy = lambda: get_GWP() * ethanol_energy_allocation()
+        MeOH_GWP_by_energy = lambda: get_GWP() * MeOH_energy_allocation()
+        
+        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
         
     get_GWP_before_electricity_offset = lambda: get_GWP() - lca.net_electricity_GWP
     
@@ -578,7 +616,7 @@ if __name__ == '__main__':
         sample_positions.append(pos)
     
     # Generate N Latin Hypercube samples
-    N = 1000
+    N = 10
     joint_dist = cp.J(*distributions)
     
     rand_samples = joint_dist.sample(size=N, rule="L", seed=3221).T 
