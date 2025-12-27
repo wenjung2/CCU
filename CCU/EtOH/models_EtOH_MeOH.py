@@ -28,8 +28,8 @@ system_element_mapping = {available_systems[0]: {'A', 'D1'},
                           available_systems[4]: {'A', 'B', 'C2', 'D1'},
                           available_systems[5]: {'A', 'B', 'C3', 'D1'},
                           }
-fixed_parameter = 'Electricity unit price (renewable)'
-fixed_value = 0.02
+fixed_params = {'Electricity unit price (renewable)': 0.}
+N=10
 
 #%%
 def create_model(system_name):
@@ -594,64 +594,69 @@ if __name__ == '__main__':
     distributions = []
     sample_positions = []
     
-    for pos, (_, row) in enumerate(dist_table.iterrows()):
-        name = str(row["Parameter name"]).strip()
+    def sample_from_dist_table(dist_table, N=N, seed=3221, fixed_params=None):
+        fixed_params = fixed_params or {}
         
-        if name == fixed_parameter:
-            continue
+        for pos, (_, row) in enumerate(dist_table.iterrows()):
+            name = str(row["Parameter name"]).strip()
+            
+            if name in fixed_params:
+                continue
+            
+            shape = row['Shape'].strip().lower()
+            lower = row['Lower']
+            upper = row['Upper']
         
-        shape = row['Shape'].strip().lower()
-        lower = row['Lower']
-        upper = row['Upper']
-    
-        if shape == 'triangular':
-            mode = row['Midpoint']
-            dist = cp.Triangle(lower, mode, upper)
-        elif shape == 'uniform':
-            dist = cp.Uniform(lower, upper)
+            if shape == 'triangular':
+                mode = row['Midpoint']
+                dist = cp.Triangle(lower, mode, upper)
+            elif shape == 'uniform':
+                dist = cp.Uniform(lower, upper)
+            else:
+                raise ValueError(f"Unsupported shape: {shape}")
+        
+            distributions.append(dist)
+            sample_positions.append(pos)
+        
+        if distributions:
+            joint_dist = cp.J(*distributions)
+            rand_samples = joint_dist.sample(size=N, rule="L", seed=seed).T 
         else:
-            raise ValueError(f"Unsupported shape: {shape}")
+            rand_samples = np.empty((N, 0), dtype=float)
+        
+        full_samples = np.empty((N, len(dist_table)), dtype=float)
+        
+        for pos, name in enumerate(param_names):
+            if name in fixed_params:
+                full_samples[:, pos] = fixed_params[name]
+        
+        for j, pos in enumerate(sample_positions):
+            full_samples[:, pos] = rand_samples[:, j]
+        
+        sample_df = pd.DataFrame(full_samples, columns=param_names)
+        # Shift samples one column right by adding empty column at index 0
+        sample_df.insert(0, 'Empty', '')
     
-        distributions.append(dist)
-        sample_positions.append(pos)
+        # Prepare metadata rows (row 0 and 1) with empty first cell for alignment
+        row1 = ['Element'] + elements
+        row2 = ['Parameter name'] + param_names
     
-    # Generate N Latin Hypercube samples
-    N = 10
-    joint_dist = cp.J(*distributions)
+        # Build full data as list of lists
+        output_data = [row1, row2]
     
-    rand_samples = joint_dist.sample(size=N, rule="L", seed=3221).T 
+        # Append samples with index in column A
+        for i, sample_row in enumerate(sample_df.values, start=1):
+            # replace first cell (empty) with index i
+            sample_row[0] = i
+            output_data.append(sample_row.tolist())
+
+        # Convert to DataFrame and export
+        output_df = pd.DataFrame(output_data)
+        output_filename = f'{N}_full_samples.xlsx'
+        output_path = os.path.join(input_folder, output_filename)
+        output_df.to_excel(output_path, index=False, header=False)
+        return output_df
     
-    full_samples = np.empty((N, len(dist_table)), dtype=float)
-    
-    fixed_pos = param_names.index(fixed_parameter)
-    full_samples[:, fixed_pos] = fixed_value
-    for j, pos in enumerate(sample_positions):
-        full_samples[:, pos] = rand_samples[:, j]
-    sample_df = pd.DataFrame(full_samples)
-    # Shift samples one column right by adding empty column at index 0
-    sample_df.insert(0, 'Empty', '')
-    
-    # Create column A data for sample indices (rows 2 onward)
-    sample_indices = list(range(1, N + 1))
-    
-    # Prepare metadata rows (row 0 and 1) with empty first cell for alignment
-    row1 = ['Element'] + elements
-    row2 = ['Parameter name'] + param_names
-    
-    # Build full data as list of lists
-    output_data = [row1, row2]
-    
-    # Append samples with index in column A
-    for i, sample_row in enumerate(sample_df.values, start=1):
-        # replace first cell (empty) with index i
-        sample_row[0] = i
-        output_data.append(sample_row.tolist())
-    
-    # Convert to DataFrame and export
-    output_df = pd.DataFrame(output_data)
-    output_filename = f'{N}_full_samples.xlsx'
-    output_path = os.path.join(input_folder, output_filename)
-    output_df.to_excel(output_path, index=False, header=False)
     
     #%%
     from datetime import datetime
@@ -678,6 +683,8 @@ if __name__ == '__main__':
             sample_columns.index(pname)
             for pname in allowed_param_names
         ]
+        
+        output_df = sample_from_dist_table(dist_table, N=N, seed=3221, fixed_params=fixed_params)
     
         # Sample rows (skip metadata rows 0 and 1)
         sample_list = []
