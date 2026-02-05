@@ -28,8 +28,13 @@ system_element_mapping = {available_systems[0]: {'A', 'D1'},
                           available_systems[4]: {'A', 'B', 'C2', 'D1'},
                           available_systems[5]: {'A', 'B', 'C3', 'D1'},
                           }
-fixed_params = {'Electricity unit price (renewable)': 0.}
-N=10
+# fixed_params = None
+# fixed_params = {'Electricity unit price (renewable)': 0.04}
+# fixed_params = {'Hydrogen unit price (renewable)': 3.5}
+fixed_params = {'Methanol unit price': 0.8,
+                'Hydrogen unit price (renewable)': 2.0}
+
+N=1000
 
 #%%
 def create_model(system_name):
@@ -85,16 +90,32 @@ def create_model(system_name):
     product_stream = s.ethanol
 
     # Unit groups (ethanol production + CCU + OSBL)
-    ethanol_production = UnitGroup('ethanol_production', units = [i for i in system.units if \
-                                                                  len(i.ID) < 5 and \
-                                                                      i.ID[1] in ('1', '2', '3', '4') \
-                                                                          and i.ID not in ('M1', 'M2')])
-                                                             
-    methanol_production = UnitGroup('methanol_production', units = [i for i in system.units if \
-                                                                    len(i.ID) > 4 and (                 
-                                                                    (i.ID[1] == '1' and i.ID[2] == '1') or \
-                                                                    (i.ID[1] == '1' and i.ID[2] == '3'))])
-                                              
+    preprocessing = UnitGroup('preprocessing', units = [i for i in system.units if \
+                                                        len(i.ID) < 5 and \
+                                                            i.ID[1] in ('1') \
+                                                                and i.ID not in ('M1', 'M2')])
+    pretreatment = UnitGroup('pretreatment', units = [i for i in system.units if \
+                                                        len(i.ID) < 5 and \
+                                                            i.ID[1] in ('2') \
+                                                                and i.ID not in ('M1', 'M2')])
+    fermentation = UnitGroup('fermentation', units = [i for i in system.units if \
+                                                        len(i.ID) < 5 and \
+                                                            i.ID[1] in ('3') \
+                                                                and i.ID not in ('M1', 'M2')])
+    distillation = UnitGroup('distillation', units = [i for i in system.units if \
+                                                        len(i.ID) < 5 and \
+                                                            i.ID[1] in ('4') \
+                                                                and i.ID not in ('M1', 'M2')])
+    carbon_capture = UnitGroup('carbon_capture', units = [i for i in system.units if \
+                                                          len(i.ID) > 4 and (                 
+                                                          (i.ID[1] == '1' and i.ID[2] == '3'))])
+    electrolyzer = UnitGroup('electrolyzer', units = [i for i in system.units if i.ID == 'R1101'])
+                                                                                                       
+    meoh_synthesis = UnitGroup('meoh_synthesis', units = [i for i in system.units if \
+                                                      len(i.ID) > 4 and (                 
+                                                      (i.ID[1] == '1' and i.ID[2] == '1') and 
+                                                      i.ID != 'R1101')])                                                                    
+                                                                          
     WWT = UnitGroup('WWT', units = [i for i in system.units if i.ID[1] == '6' \
                                         or i.ID in ('M1', 'M2', 'WWTC')])
 
@@ -106,13 +127,19 @@ def create_model(system_name):
 
     PWC = UnitGroup('PWC', units = (u.PWC,))
 
-    other_OSBL = UnitGroup('other_OSBL', units = [i for i in system.units if \
-                                                      i not in ethanol_production \
-                                                          and i not in methanol_production \
-                                                              and i not in WWT \
-                                                                  and i.ID not in ('BT', 'CT', 'CWP', 'PWC')])
-
-    process_groups = [ethanol_production, methanol_production, \
+    other_OSBL = UnitGroup('other_OSBL', units=[i for i in system.units
+                                                if i not in preprocessing
+                                                and i not in pretreatment
+                                                and i not in fermentation
+                                                and i not in distillation
+                                                and i not in carbon_capture
+                                                and i not in electrolyzer
+                                                and i not in meoh_synthesis
+                                                and i not in WWT
+                                                and i.ID not in ('BT', 'CT', 'CWP', 'PWC')])
+    
+    process_groups = [preprocessing, pretreatment, fermentation, distillation,
+                      carbon_capture, electrolyzer, meoh_synthesis,
                       WWT, BT, CT, CWP, PWC, other_OSBL]
 
     process_groups_dict = {}
@@ -410,8 +437,8 @@ def create_model(system_name):
         ethanol_GWP_by_energy = lambda: get_GWP_before_electricity_offset() * ethanol_energy_allocation()
         electricity_GWP_by_energy = lambda: get_GWP_before_electricity_offset() * electricity_energy_allocation()
         
-        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
-        metrics.append(Metric('GWP100a - electricity by allocation', electricity_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - electricity by allocation', electricity_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
         
     elif system_name == available_systems[2] or system_name == available_systems[3]:
         get_GWP = lambda: lca.GWP - lca.material_GWP_breakdown['O2']
@@ -436,8 +463,8 @@ def create_model(system_name):
         ethanol_GWP_by_energy = lambda: GWP_without_EtOH() * ethanol_energy_allocation()
         MeOH_GWP_by_energy = lambda: GWP_without_EtOH() * MeOH_energy_allocation()
         
-        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
-        metrics.append(Metric('GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
     else:
         get_GWP = lambda: lca.GWP
         get_material_GWP = lambda: lca.material_GWP
@@ -459,8 +486,8 @@ def create_model(system_name):
         ethanol_GWP_by_energy = lambda: get_GWP() * ethanol_energy_allocation()
         MeOH_GWP_by_energy = lambda: get_GWP() * MeOH_energy_allocation()
         
-        metrics.append(Metric('GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
-        metrics.append(Metric('GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
         
     get_GWP_before_electricity_offset = lambda: get_GWP() - lca.net_electricity_GWP
     
