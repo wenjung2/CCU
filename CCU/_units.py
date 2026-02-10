@@ -39,8 +39,8 @@ class Electrolyzer(Unit):
     
     _units= {'Hydrogen flow rate': 'kg/hr'}
     
-    def _init(self, base_kWh_per_kg_hydrogen=1208000/500000*24):
-        # 1208 MW for 500 MT H2 per day; based on https://www.osti.gov/biblio/2203367 P17
+    def _init(self, base_kWh_per_kg_hydrogen=52.4):
+        # based on https://www.osti.gov/biblio/2203367 P17
         self.base_kWh_per_kg_hydrogen = base_kWh_per_kg_hydrogen
         
     def _run(self):
