@@ -234,17 +234,14 @@ def create_model(system_name):
                                   
     if system_name == available_systems[0] or system_name == available_systems[1]:
         CCU.CFs['GWP_100']['O2'] = 0 # set once from dic, not function not param
-        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL,
-                                         s.natural_gas)
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL)
         by_products = []  # No coproducts for ethanol system
     elif system_name == available_systems[2] or system_name == available_systems[3]:
-        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
-                                         s.natural_gas)
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA)
         by_products = [s.MeOH, s.O2]  # MeOH and O2
     else:
         CCU.CFs['GWP_100']['O2'] = 0
-        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA,
-                                         s.natural_gas)
+        input_biogenic_carbon_streams = (feedstock, s.cellulase, s.CSL, s.makeup_MEA)
         by_products = [s.MeOH] 
 
     lca = CCU.create_CCU_lca(system=system,
