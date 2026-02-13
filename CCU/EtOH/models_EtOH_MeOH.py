@@ -28,11 +28,11 @@ system_element_mapping = {available_systems[0]: {'A', 'D1'},
                           available_systems[4]: {'A', 'B', 'C2', 'D1'},
                           available_systems[5]: {'A', 'B', 'C3', 'D1'},
                           }
-# fixed_params = None
+fixed_params = None
 # fixed_params = {'Electricity unit price (renewable)': 0.04}
 # fixed_params = {'Hydrogen unit price (renewable)': 3.5}
-fixed_params = {'Methanol unit price': 0.8,
-                'Hydrogen unit price (renewable)': 2.0}
+# fixed_params = {'Methanol unit price': 0.8,
+#                 'Hydrogen unit price (renewable)': 2.0}
 
 N=1000
 
