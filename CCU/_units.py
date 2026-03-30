@@ -74,7 +74,7 @@ class MeOH_SynthesisReactor(bst.units.design_tools.PressureVessel, bst.Unit):
     
     def _init(self, 
               T=210+273.15,
-              P=7600000/6894.76,
+              P=7600000,
               vessel_material='Stainless steel 304',
               vessel_type='Vertical',
               length_to_diameter=0.15/0.016, # 10.1016/j.jclepro.2013.06.008
@@ -91,7 +91,7 @@ class MeOH_SynthesisReactor(bst.units.design_tools.PressureVessel, bst.Unit):
         self.length_to_diameter = length_to_diameter #: Length to diameter ratio
         self.WHSV = WHSV
         self.catalyst_density = catalyst_density
-        self.catalyst_price = 13 # In USD/kg
+        self.catalyst_price = catalyst_price # In USD/kg
         self.catalyst_longevity = catalyst_longevity
         self.porosity = 0.5 
         self.reactions = ParallelRxn([
@@ -131,6 +131,191 @@ class MeOH_SynthesisReactor(bst.units.design_tools.PressureVessel, bst.Unit):
         )
         self.purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst weight']
 
+
+
+
+
+class Bi_ReformingReactor(bst.units.design_tools.PressureVessel, bst.Unit):
+    _N_ins = 2
+    _N_outs = 2
+    
+    _units = {**bst.design_tools.PressureVessel._units,
+              'Volume': 'ft^3',
+              'Catalyst weight': 'kg'}
+    
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default,
+                     'Catalyst': 1.0} # 15-NiO-MgO
+    
+    def _init(self, 
+              T=830+273.15, # Bi-reforming of Methane from Any Source with Steam and Carbon Dioxide Exclusively to Metgas (CO−2H2) for Methanol and Hydrocarbon Synthesis
+              P=7*101325, # Bi-reforming of Methane from Any Source with Steam and Carbon Dioxide Exclusively to Metgas (CO−2H2) for Methanol and Hydrocarbon Synthesis
+              vessel_material='Stainless steel 304',
+              vessel_type='Vertical',
+              GHSV = 60, # In m3/hr feed / kg catalyst; Bi-reforming of Methane from Any Source with Steam and Carbon Dioxide Exclusively to Metgas (CO−2H2) for Methanol and Hydrocarbon Synthesis
+              catalyst_price = 30, # reference in process_settings
+              catalyst_longevity = 7884, # 1 year
+              residence_time = 0.2/3600, # 0.2s; # Rules of Thumb P224
+              length_to_diameter = 3,
+        ):
+        self.T = T
+        self.P = P
+        self.vessel_material = vessel_material # Vessel material
+        self.vessel_type = vessel_type # 'Horizontal' or 'Vertical'
+        self.GHSV= GHSV
+        self.catalyst_price = catalyst_price # In USD/kg
+        self.catalyst_longevity = catalyst_longevity
+        self.residence_time = residence_time
+        self.length_to_diameter = length_to_diameter
+        self.reactions = Rxn('3 CH4 + 2 H2O + CO2 -> 4 CO + 8H2',       'CH4',      0.75)
+            
+    def _run(self):
+        feed, fresh_catalyst = self.ins
+        feed.phase = 'g'
+        feed.P = self.P
+        effluent, spent_catalyst = self.outs
+        effluent.copy_like(feed)
+        effluent.phase = 'g'
+        effluent.T = self.T
+        effluent.P = self.P
+        fresh_catalyst.imass['CaSO4'] = self.catalyst_weight = feed.F_vol / self.GHSV / self.catalyst_longevity
+        self.reactions(effluent)
+        spent_catalyst.copy_like(fresh_catalyst)
+        
+    def _design(self):
+        feed, fresh_catalyst = self.ins
+        effluent, spent_catalyst = self.outs
+        P = effluent.get_property('P', 'psi')
+        results = self.design_results
+        
+        results['Catalyst weight'] = self.catalyst_weight
+        results['Volume'] = volume = feed.F_vol * self.residence_time * 35.3147 # from m3 to ft3
+        D = cylinder_diameter_from_volume(volume, self.length_to_diameter)
+        L = self.length_to_diameter * D
+        results.update(self._vessel_design(P, D, L))
+        
+        self.add_heat_utility(self.outs[0].H - self.ins[0].H,
+                              T_in = self.ins[0].T,
+                              T_out = self.outs[0].T)
+        
+    def _cost(self):
+        D = self.design_results
+        self.purchase_costs.update(
+            self._vessel_purchase_cost(D['Weight'], D['Diameter'], D['Length'])
+        )
+        self.purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst weight']
+
+
+
+
+
+@cost(basis='Inlet flow rate', ID='Full Process', S=3600, cost=2000000/1000*395.6, # from 1000 to 395.6
+      CE=CEPCI_by_year[2003], n=0.93, BM=1.0, lifetime=7) # from rules of thumb P400
+class MethaneMembraneSeparator(bst.Unit):
+    _N_ins = 1
+    _N_outs = 2
+    
+    _units = {'Inlet flow rate': 'm^3/h'}
+    
+    def _init(self,
+              CH4_remove_ratio=0.95,
+              H2_remove_ratio=0.05,
+              CO_remove_ratio=0.05,
+              ):
+        self.CH4_remove_ratio = CH4_remove_ratio
+        self.H2_remove_ratio = H2_remove_ratio
+        self.CO_remove_ratio = CO_remove_ratio
+        
+    def _run(self):
+        gas, = self.ins
+        CH4_out, remaining = self.outs
+        
+        gas.phase = 'g'
+        CH4_out.phase = 'g'
+        remaining.phase = 'g'
+        
+        CH4_out.imass['CH4'] = gas.imass['CH4'] * self.CH4_remove_ratio
+        CH4_out.imass['H2'] = gas.imass['H2'] * self.H2_remove_ratio
+        CH4_out.imass['CO'] = gas.imass['CO'] * self.CO_remove_ratio
+        remaining.imass['CH4'] = gas.imass['CH4'] * (1 - self.CH4_remove_ratio)
+        remaining.imass['H2'] = gas.imass['H2'] * (1 - self.H2_remove_ratio)
+        remaining.imass['CO'] = gas.imass['CO'] * (1 - self.CO_remove_ratio)
+    
+    def _design(self):
+        Design = self.design_results
+        Design['Inlet flow rate'] = self.ins[0].F_vol
+
+
+
+
+
+class MeOH_SynthesisReactor_2(bst.units.design_tools.PressureVessel, bst.Unit):
+    _N_ins = _N_outs = 2
+    
+    _units = {**bst.design_tools.PressureVessel._units,
+              'Volume': 'ft^3',
+              'Catalyst weight': 'kg'}
+    
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default,
+                     'Catalyst': 1.0} # Cu/ZnO/Al2O3
+    
+    def _init(self, 
+              T=210+273.15,
+              P=70*101325,
+              vessel_material='Stainless steel 304',
+              vessel_type='Vertical',
+              length_to_diameter=1/0.03, # https://dx.doi.org/10.1021/acs.iecr.0c00755
+              WHSV = 0.028 * 3600 / 34.8, # In kg/hr feed / kg catalyst; 10.1016/j.jclepro.2013.06.008
+              catalyst_density = 2000, # In kg/m^3; https://dx.doi.org/10.1021/acs.iecr.0c00755
+              catalyst_price = 30, # reference in process_settings
+              catalyst_longevity = 7884, # 1 year; from Perez report
+              porosity = 0.5, # fraction of the bed volume occupied by void space
+        ):
+        self.T = T
+        self.P = P
+        self.vessel_material = vessel_material # Vessel material
+        self.vessel_type = vessel_type # 'Horizontal' or 'Vertical'
+        self.length_to_diameter = length_to_diameter #: Length to diameter ratio
+        self.WHSV = WHSV
+        self.catalyst_density = catalyst_density
+        self.catalyst_price = 13 # In USD/kg
+        self.catalyst_longevity = catalyst_longevity
+        self.porosity = 0.5
+        self.reactions = Rxn('4 CO + 8 H2 -> 4 CH3OH',       'CO',      0.2)
+                
+    
+    def _run(self):
+        feed, fresh_catalyst = self.ins
+        fresh_catalyst.phase = 's'
+        feed.T = self.T
+        feed.P = self.P
+        effluent, spent_catalyst = self.outs
+        effluent.copy_like(feed)
+        spent_catalyst.phase = 's'
+        fresh_catalyst.imass['CaSO4'] = self.catalyst_weight = feed.F_mass / self.WHSV / self.catalyst_longevity
+        self.reactions.adiabatic_reaction(effluent)
+        spent_catalyst.copy_like(fresh_catalyst)
+        
+    def _design(self):
+        feed, fresh_catalyst = self.ins
+        effluent, spent_catalyst = self.outs
+        length_to_diameter = self.length_to_diameter
+        P = effluent.get_property('P', 'psi')
+        results = self.design_results
+        
+        results['Catalyst weight'] = self.catalyst_weight
+        results['Volume'] = volume = self.catalyst_weight / self.catalyst_density / (1-self.porosity) * 35.3147 # to ft3
+        D = cylinder_diameter_from_volume(volume, length_to_diameter)
+        L = length_to_diameter * D
+        results.update(self._vessel_design(P, D, L))
+        
+    def _cost(self):
+        D = self.design_results
+        self.purchase_costs.update(
+            self._vessel_purchase_cost(D['Weight'], D['Diameter'], D['Length'])
+        )
+        self.purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst weight']
+
+        
 # =============================================================================
 # Formic acid synthesis
 # =============================================================================

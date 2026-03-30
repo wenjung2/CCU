@@ -19,14 +19,16 @@ from warnings import filterwarnings; filterwarnings('ignore')
 
 available_systems = ['sys_ethanol_conventional', 'sys_ethanol_renewable', # in terms of electricity
                      'sys_MeOH_water_electrolyzer_renewable', 'sys_MeOH_water_electrolyzer_NG',
-                     'sys_MeOH_hydrogen_conventional', 'sys_MeOH_hydrogen_renewable']
+                     'sys_MeOH_hydrogen_conventional', 'sys_MeOH_hydrogen_renewable',
+                     'sys_MeOH_reforming']
 
 system_element_mapping = {available_systems[0]: {'A', 'D1'},
                           available_systems[1]: {'A', 'D2'},
-                          available_systems[2]: {'A', 'B', 'C1', 'D2'},
-                          available_systems[3]: {'A', 'B', 'C1', 'D1'},
+                          available_systems[2]: {'A', 'B', 'B1', 'C1', 'D2'},
+                          available_systems[3]: {'A', 'B', 'B1', 'C1', 'D1'},
                           available_systems[4]: {'A', 'B', 'C2', 'D1'},
                           available_systems[5]: {'A', 'B', 'C3', 'D1'},
+                          available_systems[6]: {'A', 'B', 'B2', 'D1'},
                           }
 fixed_params = None
 # fixed_params = {'Electricity unit price (renewable)': 0.04}
@@ -72,6 +74,8 @@ def create_model(system_name):
         system = CCU.system_hydrogen_purchased(ID='sys_MeOH_hydrogen_conventional', water_electrolyzer=False)
     elif system_name == available_systems[5]:
         system = CCU.system_hydrogen_purchased(ID='sys_MeOH_hydrogen_renewable', water_electrolyzer=False)
+    elif system_name == available_systems[6]:
+        system = CCU.create_full_system(ID='sys_MeOH_reforming')
     
     
     CCU.load_preferences_and_process_settings(T='K',
@@ -368,13 +372,15 @@ def create_model(system_name):
     metrics.extend((Metric('WWT emissions C', get_C_emissions_WWT, '', 'Carbon'),))
     
     # metrics for CCU
-    if system_name in [available_systems[2], available_systems[3], available_systems[4], available_systems[5]]:
+    if system_name in [available_systems[2], available_systems[3], available_systems[4], available_systems[5], available_systems[6]]:
         
         get_S1300_split = lambda: system.flowsheet.S1300.split[0]
         
         get_C_fermentation_used = lambda: system.flowsheet.M1302.ins[0].get_atomic_flow('C')
         get_C_boiler_used = lambda: system.flowsheet.M1302.ins[1].get_atomic_flow('C')
         get_C_natural_gas = lambda: system.flowsheet.BT.ins[3].get_atomic_flow('C')
+        get_C_natural_gas_reforming = lambda: system.flowsheet.natural_gas_2.get_atomic_flow('C')
+        
         get_C_methanol = lambda: system.flowsheet.MeOH.get_atomic_flow('C')
         get_C_emissions_MeOH_offgas = lambda: system.flowsheet.gas_out.get_atomic_flow('C')
         
@@ -389,6 +395,7 @@ def create_model(system_name):
         metrics.extend((Metric('Fermentation C used', get_C_fermentation_used, '', 'Carbon'),))
         metrics.extend((Metric('Boiler C used', get_C_boiler_used, '', 'Carbon'),))
         metrics.extend((Metric('Natural gas C', get_C_natural_gas, '', 'Carbon'),))
+        metrics.extend((Metric('Natural gas C for reforming', get_C_natural_gas_reforming, '', 'Carbon'),))
         metrics.extend((Metric('MeOH C', get_C_methanol, '', 'Carbon'),))
         metrics.extend((Metric('MeOH_offgas C', get_C_emissions_MeOH_offgas, '', 'Carbon'),))
         metrics.extend((Metric('C emissions per ethanol MeOH', get_C_emissions_per_ethanol_MeOH, '', 'Carbon'),))
@@ -442,7 +449,7 @@ def create_model(system_name):
         get_material_GWP = get_material_GWP_no_O2 = lambda: lca.material_GWP - lca.material_GWP_breakdown['O2']
         get_other_materials_GWP = lambda: get_material_GWP_no_O2() -\
             lca.material_GWP_breakdown['CSL'] - lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
-                lca.material_GWP_breakdown['MEA'] - lca.material_GWP_breakdown['Cellulase']
+                lca.material_GWP_breakdown['Cellulase']
         Metric('H2 cost', get_hydrogen_AOC, '10^6 $/yr', 'TEA'),
         metrics.append(Metric('GWP100a - Coproduct credit - Methanol', lambda: lca.GWP_byproduct_credit(0), 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('GWP100a - Coproduct credit - O2', lambda: lca.GWP_byproduct_credit(1), 'kg-CO2-eq/kg', 'LCA'))
@@ -452,17 +459,17 @@ def create_model(system_name):
         metrics.append(Metric('Amount - ETOH', lambda: s.ethanol.imass['Ethanol'], 'kg-CO2-eq/kg', 'LCA'))
         
         # using hybrid allocation (O2 displaced, MeOH and EtOH energy allocation)
-        GWP_without_EtOH = lambda: get_GWP() + lca.GWP_byproduct_credit(0)
+        GWP_total_energy = lambda: get_GWP() + lca.GWP_byproduct_credit_total()
         ethanol_energy_allocation = lambda: s.ethanol.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
                                                                                        +s.MeOH.get_property('LHV', 'GGE/hr'))
         MeOH_energy_allocation = lambda: s.MeOH.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
                                                                                        +s.MeOH.get_property('LHV', 'GGE/hr'))
-        ethanol_GWP_by_energy = lambda: GWP_without_EtOH() * ethanol_energy_allocation()
-        MeOH_GWP_by_energy = lambda: GWP_without_EtOH() * MeOH_energy_allocation()
+        ethanol_GWP_by_energy = lambda: GWP_total_energy() * ethanol_energy_allocation()
+        MeOH_GWP_by_energy = lambda: GWP_total_energy() * MeOH_energy_allocation()
         
         metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('Total GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
-    else:
+    elif system_name == available_systems[4] or system_name == available_systems[5]:
         get_GWP = lambda: lca.GWP
         get_material_GWP = lambda: lca.material_GWP
         get_other_materials_GWP = lambda: get_material_GWP() - lca.material_GWP_breakdown['CSL'] -\
@@ -480,8 +487,38 @@ def create_model(system_name):
                                                                                        +s.MeOH.get_property('LHV', 'GGE/hr'))
         MeOH_energy_allocation = lambda: s.MeOH.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
                                                                                        +s.MeOH.get_property('LHV', 'GGE/hr'))
-        ethanol_GWP_by_energy = lambda: get_GWP() * ethanol_energy_allocation()
-        MeOH_GWP_by_energy = lambda: get_GWP() * MeOH_energy_allocation()
+        ethanol_GWP_by_energy = lambda: (get_GWP() + lca.GWP_byproduct_credit_total()) * ethanol_energy_allocation()
+        MeOH_GWP_by_energy = lambda: (get_GWP() + lca.GWP_byproduct_credit_total()) * MeOH_energy_allocation()
+        
+        metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('Total GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
+    else:
+        get_GWP = lambda: lca.GWP
+        get_material_GWP = lambda: lca.material_GWP
+        get_other_materials_GWP = lambda: get_material_GWP() - lca.material_GWP_breakdown['CSL'] -\
+            lca.material_GWP_breakdown['DAP'] - lca.material_GWP_breakdown['CH4'] -\
+                lca.material_GWP_breakdown['Cellulase']
+        
+        NG_C_mol = lambda: s.natural_gas.imol['CH4']
+        NG_reforming_C_mol = lambda: s.natural_gas_2.imol['CH4']
+        
+        NG_reforming_C_ratio = lambda: NG_reforming_C_mol() / (NG_C_mol() + NG_reforming_C_mol())
+             
+        metrics.append(Metric('GWP100a - Coproduct credit - Methanol', lambda: lca.GWP_byproduct_credit(0), 'kg-CO2-eq/kg', 'LCA'))
+        metrics.append(Metric('GWP100a - Materials breakdown - CH4_reforming', lambda: lca.material_GWP_breakdown['CH4']*\
+                              NG_reforming_C_ratio(), 'kg-CO2-eq/kg', 'LCA'))
+        
+        metrics.append(Metric('Amount - NG_C_mol', NG_C_mol, 'kmol/hr', 'LCA'))
+        metrics.append(Metric('Amount - NG_reforming_C_mol', NG_reforming_C_mol, 'kmol/hr', 'LCA'))
+        metrics.append(Metric('Amount - NG_reforming_C_ratio', NG_reforming_C_ratio, '', 'LCA'))
+        
+        # using energy allocation (MeOH and EtOH)
+        ethanol_energy_allocation = lambda: s.ethanol.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        MeOH_energy_allocation = lambda: s.MeOH.get_property('LHV', 'GGE/hr') / (s.ethanol.get_property('LHV', 'GGE/hr')
+                                                                                       +s.MeOH.get_property('LHV', 'GGE/hr'))
+        ethanol_GWP_by_energy = lambda: (get_GWP() + lca.GWP_byproduct_credit_total()) * ethanol_energy_allocation()
+        MeOH_GWP_by_energy = lambda: (get_GWP() + lca.GWP_byproduct_credit_total()) * MeOH_energy_allocation()
         
         metrics.append(Metric('Total GWP100a - ethanol by allocation', ethanol_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
         metrics.append(Metric('Total GWP100a - MeOH by allocation', MeOH_GWP_by_energy, 'kg-CO2-eq/kg', 'LCA'))
@@ -494,7 +531,7 @@ def create_model(system_name):
     metrics.append(Metric('GWP100a - Direct emissions', lambda: lca.direct_emissions_GWP, 'kg-CO2-eq/kg', 'LCA'))
     metrics.append(Metric('GWP100a - Direct biogenic emissions', lambda: lca.biogenic_emissions_GWP, 'kg-CO2-eq/kg', 'LCA'))
     metrics.append(Metric('GWP100a - EoL emissions', lambda: lca.EOL_GWP, 'kg-CO2-eq/kg', 'LCA'))
-    metrics.append(Metric('GWP100a - Direct non-biogenic emissions', lambda: lca.direct_non_biogenic_emissions_GWP, 'kg-CO2-eq/kg', 'LCA'))
+    metrics.append(Metric('GWP100a - Direct & EOL non-biogenic emissions', lambda: lca.direct_non_biogenic_emissions_GWP, 'kg-CO2-eq/kg', 'LCA'))
 
     metrics.append(Metric('GWP100a - Feedstock (FGHTP)', lambda: lca.FGHTP_GWP, 'kg-CO2-eq/kg', 'LCA'))
     metrics.append(Metric('GWP100a - Materials (except feedstock)', get_material_GWP, 'kg-CO2-eq/kg', 'LCA'))
